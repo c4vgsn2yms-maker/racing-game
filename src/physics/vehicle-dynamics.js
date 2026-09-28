@@ -160,6 +160,15 @@ window.GravelRushPhysics = (() => {
       wheel.normalLoad = Math.max(40, dynamicLoad + bumpLoad);
     }
 
+    // Anti-roll bars couple left/right suspension travel at each axle. This does not
+    // create grip; it redistributes vertical load and therefore changes each tire's limit.
+    const frontArb = (state.wheels.fl.compression - state.wheels.fr.compression) * s.antiRollFront;
+    const rearArb = (state.wheels.rl.compression - state.wheels.rr.compression) * s.antiRollRear;
+    state.wheels.fl.normalLoad = Math.max(40, state.wheels.fl.normalLoad + frontArb);
+    state.wheels.fr.normalLoad = Math.max(40, state.wheels.fr.normalLoad - frontArb);
+    state.wheels.rl.normalLoad = Math.max(40, state.wheels.rl.normalLoad + rearArb);
+    state.wheels.rr.normalLoad = Math.max(40, state.wheels.rr.normalLoad - rearArb);
+
     const leftCompression = (state.wheels.fl.compression + state.wheels.rl.compression) * 0.5;
     const rightCompression = (state.wheels.fr.compression + state.wheels.rr.compression) * 0.5;
     const frontCompression = (state.wheels.fl.compression + state.wheels.fr.compression) * 0.5;
@@ -182,7 +191,10 @@ window.GravelRushPhysics = (() => {
   function brakeTorques(state, inputs) {
     const c = state.config;
     const b = c.brakes;
-    const requested = inputs.brake * b.maxTorque;
+    // In automatic reverse, the brake pedal becomes reverse throttle once nearly stopped.
+    // The opposite pedal then acts as the service brake.
+    const serviceBrake = state.powertrain.reverse ? inputs.throttle : inputs.brake;
+    const requested = serviceBrake * b.maxTorque;
     const frontEach = requested * b.frontBias * 0.5;
     const rearEach = requested * (1 - b.frontBias) * 0.5;
     const result = { fl: frontEach, fr: frontEach, rl: rearEach, rr: rearEach };
