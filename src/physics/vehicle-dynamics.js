@@ -49,6 +49,8 @@ window.GravelRushPhysics = (() => {
       previousAy: 0,
       pitch: 0,
       roll: 0,
+      roadPitch: 0,
+      roadRoll: 0,
       steerAngle: 0,
       speed: 0,
       groundHeight: 0,
@@ -126,6 +128,13 @@ window.GravelRushPhysics = (() => {
     };
 
     const avgGround = state.groundHeight;
+    const frontGround = (state.wheels.fl.groundHeight + state.wheels.fr.groundHeight) * 0.5;
+    const rearGround = (state.wheels.rl.groundHeight + state.wheels.rr.groundHeight) * 0.5;
+    const leftGround = (state.wheels.fl.groundHeight + state.wheels.rl.groundHeight) * 0.5;
+    const rightGround = (state.wheels.fr.groundHeight + state.wheels.rr.groundHeight) * 0.5;
+
+    state.roadPitch = Math.atan2(frontGround - rearGround, c.wheelbase);
+    state.roadRoll = Math.atan2(rightGround - leftGround, trackMean);
 
     for (const key of Object.keys(WHEEL_LAYOUT)) {
       const wheel = state.wheels[key];
@@ -137,7 +146,11 @@ window.GravelRushPhysics = (() => {
 
       wheel.targetLoad = Math.max(60, targets[key]);
 
-      const roadInput = M.clamp(wheel.groundHeight - avgGround, -0.12, 0.12);
+      const pos = wheelPosition(c, key);
+      const planeHeight = avgGround +
+        pos.x * Math.tan(state.roadPitch) +
+        pos.y * Math.tan(state.roadRoll);
+      const roadInput = M.clamp(wheel.groundHeight - planeHeight, -0.12, 0.12);
       let targetCompression = wheel.targetLoad / springRate + roadInput;
 
       if (targetCompression > travel) {
@@ -174,17 +187,18 @@ window.GravelRushPhysics = (() => {
     const frontCompression = (state.wheels.fl.compression + state.wheels.fr.compression) * 0.5;
     const rearCompression = (state.wheels.rl.compression + state.wheels.rr.compression) * 0.5;
 
-    const frontGround = (state.wheels.fl.groundHeight + state.wheels.fr.groundHeight) * 0.5;
-    const rearGround = (state.wheels.rl.groundHeight + state.wheels.rr.groundHeight) * 0.5;
-    const leftGround = (state.wheels.fl.groundHeight + state.wheels.rl.groundHeight) * 0.5;
-    const rightGround = (state.wheels.fr.groundHeight + state.wheels.rr.groundHeight) * 0.5;
+    const staticFrontCompression = frontStatic * 0.5 / s.springRateFront;
+    const staticRearCompression = rearStatic * 0.5 / s.springRateRear;
+    const frontDeflection = frontCompression - staticFrontCompression;
+    const rearDeflection = rearCompression - staticRearCompression;
 
-    state.pitch = Math.atan2(frontGround - rearGround + rearCompression - frontCompression, c.wheelbase);
-    state.roll = Math.atan2(rightGround - leftGround + leftCompression - rightCompression, trackMean);
+    state.pitch = state.roadPitch +
+      Math.atan2(rearDeflection - frontDeflection, c.wheelbase);
+    state.roll = state.roadRoll +
+      Math.atan2(leftCompression - rightCompression, trackMean);
 
     const avgCompression = (leftCompression + rightCompression) * 0.5;
-    const staticCompression = weight * 0.25 /
-      ((s.springRateFront + s.springRateRear) * 0.5);
+    const staticCompression = (staticFrontCompression + staticRearCompression) * 0.5;
     state.bodyHeightOffset = c.rideHeight - (avgCompression - staticCompression) * 0.38;
   }
 
@@ -328,8 +342,8 @@ window.GravelRushPhysics = (() => {
     }
 
     // Gravity projected onto the local road plane inferred from the four sampled wheel heights.
-    sumFx += -c.mass * M.G * Math.sin(state.pitch);
-    sumFy += -c.mass * M.G * Math.sin(state.roll);
+    sumFx += -c.mass * M.G * Math.sin(state.roadPitch);
+    sumFy += -c.mass * M.G * Math.sin(state.roadRoll);
 
     // Mild aerodynamic / chassis yaw damping keeps very high-speed spins finite.
     yawMoment += -state.yawRate * (150 + speed * 12);
