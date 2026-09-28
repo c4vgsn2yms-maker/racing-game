@@ -13,8 +13,18 @@ The default build streams real-world Phoenix imagery and geometry from **Google 
 - Third-person chase camera
 - Hood/close camera
 - Free orbit camera
-- Simple vehicle acceleration, braking, reverse and bicycle-model steering
-- Handbrake-assisted rotation
+- Four-wheel longitudinal/lateral/yaw vehicle dynamics
+- Per-wheel combined-slip tire forces and load-sensitive traction
+- Longitudinal and lateral load transfer
+- Spring/damper suspension with travel, bump stops and anti-roll distribution
+- Road grade/bank derived from four wheel-height samples
+- Aerodynamic drag, mild downforce and side drag
+- Speed-dependent rolling resistance
+- RPM/torque-curve engine model
+- 6-speed automatic transmission, final drive and driveline efficiency
+- AWD center/axle limited-slip torque distribution
+- ABS and traction control
+- Handbrake-assisted rear-wheel braking
 - Keyboard controls
 - Gamepad controls
 - Touch controls
@@ -39,6 +49,18 @@ You need a Google Cloud project with billing enabled and the **Map Tiles API** e
 Do not commit unrestricted API keys to this public repository.
 
 See `docs/GOOGLE_MAPS_SETUP.md` for details.
+
+## Vehicle physics
+
+The vehicle simulation is modular and parameterized in SI units. The current baseline is a fictional 1520 kg AWD rally car rather than a copy of a production model.
+
+Read `docs/PHYSICS_MODEL.md` for the equations, modeling choices, calibration assumptions and known limitations.
+
+Run the dependency-free physics regression checks with:
+
+```bash
+npm test
+```
 
 ## Controls
 
