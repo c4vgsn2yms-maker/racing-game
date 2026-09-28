@@ -32,6 +32,7 @@
         <span id="slip">0% WHEEL SLIP</span>
         <span id="grip">0% GRIP</span>
         <span id="drive">AWD • ABS • TCS</span>
+        <span id="controller-status">CONTROLLER: NOT CONNECTED</span>
       </div>
 
       <div class="hud-actions">
@@ -68,6 +69,10 @@
       <span>Space handbrake</span>
       <span>C camera</span>
       <span>R reset</span>
+      <span>Pad: LS/D-pad steer</span>
+      <span>RT/R2 gas • LT/L2 brake</span>
+      <span>A/Cross handbrake</span>
+      <span>Y/Triangle camera • B/Circle reset</span>
     </section>
 
     <section id="touch-controls" class="hidden" aria-label="Touch driving controls">
@@ -91,6 +96,7 @@
   <script src="src/physics/tire-model.js"></script>
   <script src="src/physics/powertrain.js"></script>
   <script src="src/physics/vehicle-dynamics.js"></script>
+  <script src="src/input/gamepad.js"></script>
   <script src="src/phoenix.js"></script>
 </body>
 </html>
