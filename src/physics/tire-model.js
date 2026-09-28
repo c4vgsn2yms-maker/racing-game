@@ -14,17 +14,21 @@ window.GravelRushTires = (() => {
     normalLoad,
     longitudinalVelocity,
     lateralVelocity,
-    wheelOmega,
-    steerAngle
+    steerAngle,
+    longitudinalDemand
   }) {
     if (normalLoad <= 1) {
       return {
         fx: 0,
         fy: 0,
+        wheelFx: 0,
+        wheelFy: 0,
         slipRatio: 0,
         slipAngle: 0,
         mu: 0,
-        saturation: 0
+        saturation: 0,
+        excessLongitudinalForce: 0,
+        wheelLongitudinalVelocity: 0
       };
     }
 
@@ -33,47 +37,52 @@ window.GravelRushTires = (() => {
 
     const vx = c * longitudinalVelocity + s * lateralVelocity;
     const vy = -s * longitudinalVelocity + c * lateralVelocity;
-
-    const referenceSpeed = Math.max(Math.abs(vx), 2.0);
-    const treadSpeed = wheelOmega * config.radius;
-    const slipRatio = clamp((treadSpeed - vx) / referenceSpeed, -2.5, 2.5);
-    const slipAngle = clamp(Math.atan2(vy, Math.max(Math.abs(vx), 1.5)), -1.2, 1.2);
+    const slipAngle = clamp(Math.atan2(vy, Math.max(Math.abs(vx), 1.2)), -1.2, 1.2);
 
     const mu = frictionCoefficient(config, normalLoad);
     const frictionLimit = Math.max(mu * normalLoad, 1);
 
-    // Brush-like linear region transitioning smoothly into the friction limit.
-    let fx = config.longitudinalStiffness * slipRatio;
-    let fy = -config.corneringStiffness * Math.tan(slipAngle);
+    // Lateral brush response. The hyperbolic tangent gives a progressive breakaway
+    // instead of an abrupt linear-force clamp.
+    const lateralLinear = -config.corneringStiffness * Math.tan(slipAngle);
+    const wheelFy = frictionLimit * Math.tanh(lateralLinear / frictionLimit);
 
-    const normalized = Math.hypot(fx / frictionLimit, fy / frictionLimit);
-    let saturation = normalized;
+    // Friction-circle coupling: lateral cornering force consumes some of the same
+    // contact-patch capacity needed for acceleration or braking.
+    const lateralRatio = clamp(wheelFy / frictionLimit, -1, 1);
+    const longitudinalCapacity = frictionLimit * Math.sqrt(Math.max(0, 1 - lateralRatio * lateralRatio));
 
-    if (normalized > 1) {
-      const scale = 1 / normalized;
-      fx *= scale;
-      fy *= scale;
-      saturation = 1;
-    } else if (normalized > 0.72) {
-      // Progressively soften the approach to the peak so breakaway is not a hard clamp.
-      const blend = (normalized - 0.72) / 0.28;
-      const softScale = 1 - 0.12 * blend * blend;
-      fx *= softScale;
-      fy *= softScale;
+    const wheelFx = clamp(longitudinalDemand, -longitudinalCapacity, longitudinalCapacity);
+    const excessLongitudinalForce = longitudinalDemand - wheelFx;
+
+    // Estimate slip from the force operating point. Once demand exceeds available
+    // friction, slip grows beyond the nominal peak to represent wheelspin/lockup.
+    let slipRatio;
+    if (Math.abs(longitudinalDemand) <= longitudinalCapacity + 1) {
+      slipRatio = wheelFx / Math.max(config.longitudinalStiffness, 1);
+    } else {
+      const excessRatio = Math.abs(excessLongitudinalForce) / frictionLimit;
+      slipRatio = Math.sign(longitudinalDemand) *
+        (config.slipPeakLongitudinal + clamp(excessRatio * 0.55, 0, 1.8));
     }
 
-    const bodyFx = c * fx - s * fy;
-    const bodyFy = s * fx + c * fy;
+    slipRatio = clamp(slipRatio, -2.5, 2.5);
+
+    const bodyFx = c * wheelFx - s * wheelFy;
+    const bodyFy = s * wheelFx + c * wheelFy;
+    const saturation = clamp(Math.hypot(wheelFx, wheelFy) / frictionLimit, 0, 1);
 
     return {
       fx: bodyFx,
       fy: bodyFy,
-      wheelFx: fx,
-      wheelFy: fy,
+      wheelFx,
+      wheelFy,
       slipRatio,
       slipAngle,
       mu,
-      saturation
+      saturation,
+      excessLongitudinalForce,
+      wheelLongitudinalVelocity: vx
     };
   }
 
