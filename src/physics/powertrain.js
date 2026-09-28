@@ -28,10 +28,10 @@ window.GravelRushPowertrain = (() => {
     return names.reduce((sum, key) => sum + Math.abs(wheels[key].omega), 0) / names.length;
   }
 
-  function updateTransmission(config, state, wheels, longitudinalSpeed, inputs, dt) {
+  function updateTransmission(config, state, wheels, longitudinalSpeed, vehicleSpeed, inputs, dt) {
     state.shiftTimer = Math.max(0, state.shiftTimer - dt);
 
-    if (Math.abs(longitudinalSpeed) < 0.65) {
+    if (vehicleSpeed < 0.65) {
       if (inputs.brake > 0.45 && inputs.throttle < 0.1) state.reverse = true;
       if (inputs.throttle > 0.12) state.reverse = false;
     }
