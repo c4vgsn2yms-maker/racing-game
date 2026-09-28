@@ -4,6 +4,6 @@
   "private": true,
   "description": "3D Phoenix open-world driving prototype with modular vehicle dynamics",
   "scripts": {
-    "test": "node tests/physics-smoke.js"
+    "test": "node tests/physics-smoke.js && node tests/gamepad-smoke.js"
   }
 }
