@@ -271,13 +271,18 @@ window.GravelRushPhysics = (() => {
       const wheelVx = state.vx - state.yawRate * pos.y;
       const wheelVy = state.vy + state.yawRate * pos.x;
 
+      const driveForceDemand = driveTorques[key] / tireCfg.radius;
+      const brakeDirection = Math.sign(wheelVx || state.vx || wheel.omega || 1);
+      const brakeForceDemand = brakes[key] / tireCfg.radius * brakeDirection;
+      const longitudinalDemand = driveForceDemand - brakeForceDemand;
+
       const force = Tires.combinedTireForce({
         config: tireCfg,
         normalLoad: wheel.normalLoad,
         longitudinalVelocity: wheelVx,
         lateralVelocity: wheelVy,
-        wheelOmega: wheel.omega,
-        steerAngle: steer
+        steerAngle: steer,
+        longitudinalDemand
       });
 
       wheel.lastSlipRatio = force.slipRatio;
@@ -294,17 +299,14 @@ window.GravelRushPhysics = (() => {
       sumFy += force.fy;
       yawMoment += pos.x * force.fy - pos.y * force.fx;
 
-      const rollingTorque = tireCfg.rollingResistance * wheel.normalLoad * tireCfg.radius *
-        Math.sign(wheel.omega || wheelVx || 1);
+      const targetOmega =
+        force.wheelLongitudinalVelocity * (1 + force.slipRatio) / tireCfg.radius;
+      const excessTorque = force.excessLongitudinalForce * tireCfg.radius;
 
-      const brakeSign = Math.sign(wheel.omega || wheelVx || 1);
-      const netWheelTorque =
-        driveTorques[key] -
-        brakes[key] * brakeSign -
-        force.wheelFx * tireCfg.radius -
-        rollingTorque;
-
-      wheel.omega += (netWheelTorque / tireCfg.wheelInertia) * dt;
+      // Wheel rotational state follows road speed in the adhesion region and spins
+      // progressively when requested torque exceeds the contact patch limit.
+      wheel.omega += (targetOmega - wheel.omega) * Math.min(1, dt * 18);
+      wheel.omega += (excessTorque / tireCfg.wheelInertia) * dt * 0.18;
 
       const omegaLimit = 310;
       wheel.omega = M.clamp(wheel.omega, -omegaLimit, omegaLimit);
