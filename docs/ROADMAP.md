@@ -14,21 +14,48 @@ Implemented:
 - Streaming world architecture
 - Preserved legacy 2D handling build
 
-## Next — Real vehicle physics
+## Vehicle physics — implemented baseline
 
-Move the player car from a simple geodetic bicycle model toward a proper rigid-body vehicle simulation:
+The browser build now includes:
 
-- sprung and unsprung mass
-- four-wheel suspension raycasts
-- tire slip angle and longitudinal slip
-- weight transfer
-- engine torque curve
-- clutch and gearbox
-- FWD / RWD / AWD / selectable 4WD
-- open, limited-slip and locking differentials
-- ABS and traction control options
-- tire temperature / compound hooks
+- 3-DOF rigid-body longitudinal/lateral/yaw dynamics
+- four independently loaded tire contact patches
+- slip angle and estimated longitudinal slip
+- combined tire-force friction limit
+- tire load sensitivity
+- longitudinal and lateral load transfer
+- per-corner spring/damper suspension
+- suspension travel and bump stops
+- anti-roll stiffness distribution
+- four-wheel 3D ground-height sampling
+- road grade and bank
+- engine RPM/torque curve
+- clutch coupling approximation
+- six forward gears + reverse
+- final drive and driveline efficiency
+- AWD center and axle limited-slip behavior
+- configurable FWD/RWD/AWD architecture
+- service brake bias
+- handbrake
+- ABS
+- traction control
+- aerodynamic drag, side drag and downforce
+- rolling resistance
+- fixed physics substeps around 120 Hz
+- physics regression smoke tests
+
+## Next — higher-fidelity vehicle physics
+
+- measured Pacejka / MF-Tyre parameter sets
+- tire temperature, pressure, wear and wet-grip state
+- explicit unsprung mass and tire vertical compliance per corner
+- suspension geometry: camber, caster, toe, roll centers and bump steer
+- true 6-DOF sprung-body pitch/roll/heave inertia
+- driveline shaft compliance, clutch dynamics and backlash
+- turbo/manifold dynamics for turbocharged vehicles
+- selectable open/LSD/locking differential types
 - controller vibration / force feedback where supported
+- proper collision shapes and rigid-body impacts
 
 Vehicle data should include mass, wheelbase, track width, suspension travel, center of mass, engine curve, gear ratios, final drive, steering lock, aero drag, tire parameters and surface grip.
 
