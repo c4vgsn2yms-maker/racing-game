@@ -26,7 +26,11 @@ The default build streams real-world Phoenix imagery and geometry from **Google 
 - ABS and traction control
 - Handbrake-assisted rear-wheel braking
 - Keyboard controls
-- Gamepad controls
+- First-class Gamepad API controller support
+- Analog triggers and steering deadzones
+- D-pad steering fallback
+- Controller camera/reset actions
+- Feature-detected controller haptics
 - Touch controls
 - Ground-height sampling against loaded 3D geometry
 - Sudden-height obstacle rejection to reduce driving onto building roofs
@@ -72,11 +76,17 @@ npm test
 - C — camera
 - R — reset downtown
 
-**Gamepad**
-- RT / R2 — throttle
-- LT / L2 — brake / reverse
-- Left stick — steer
+**Gamepad / controller**
+- Left stick or D-pad — steer
+- RT / R2 — analog throttle
+- LT / L2 — analog brake / reverse
 - A / Cross — handbrake
+- Y / Triangle — cycle camera
+- B / Circle — reset vehicle
+- Right stick — look around in chase/hood camera
+- Controller vibration — tire slip / high-load feedback when the browser and controller support haptics
+
+The game listens for controller connect/disconnect events and prefers the browser's standard gamepad mapping. Xbox-style, PlayStation-style and compatible standard-mapped controllers should work without a separate profile.
 
 **Touch**
 - On-screen steering, gas, brake and handbrake
