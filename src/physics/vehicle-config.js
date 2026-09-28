@@ -73,7 +73,7 @@ window.GravelRushVehicleConfig = {
     shiftDownRPM: 2250,
     engineInertia: 0.22,
     clutchLockSpeed: 7.5,
-    engineBrakeFactor: 0.14,
+    engineBrakeFactor: 0.035,
     tractionControl: true,
     tractionSlipThreshold: 0.16,
     torqueCurve: [
