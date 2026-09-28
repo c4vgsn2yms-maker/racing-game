@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#111318" />
+  <title>Gravel Rush</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="game-shell">
+    <canvas id="game" aria-label="Gravel Rush racing game"></canvas>
+
+    <section id="hud" aria-live="polite">
+      <div class="hud-group">
+        <strong id="speed">0 mph</strong>
+        <span id="surface">GRAVEL</span>
+      </div>
+      <div class="hud-center">
+        <span id="lap">Lap 1 / 3</span>
+        <strong id="timer">00:00.000</strong>
+        <span id="best">Best --:--.---</span>
+      </div>
+      <button id="reset" type="button">RESET</button>
+    </section>
+
+    <section id="start-card">
+      <h1>GRAVEL RUSH</h1>
+      <p>Fast, loose, and built for dirt.</p>
+      <button id="start" type="button">START RACE</button>
+      <small>Keyboard, controller, and touch supported.</small>
+    </section>
+
+    <section id="touch-controls" aria-label="Touch driving controls">
+      <div class="touch-cluster steering">
+        <button data-control="left" aria-label="Steer left">◀</button>
+        <button data-control="right" aria-label="Steer right">▶</button>
+      </div>
+      <div class="touch-cluster pedals">
+        <button data-control="handbrake" class="handbrake" aria-label="Handbrake">HB</button>
+        <button data-control="brake" class="brake" aria-label="Brake or reverse">BRAKE</button>
+        <button data-control="throttle" class="throttle" aria-label="Throttle">GAS</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="src/game.js"></script>
+</body>
+</html>
