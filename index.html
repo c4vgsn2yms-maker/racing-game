@@ -16,13 +16,24 @@
       <div class="hud-block drive">
         <strong id="speed">0</strong>
         <span class="unit">MPH</span>
-        <span id="gear">D</span>
+        <strong id="gear">N</strong>
+        <span id="rpm">900 RPM</span>
       </div>
+
       <div class="hud-block world">
         <strong>PHOENIX, AZ</strong>
         <span id="coords">33.44838, -112.07404</span>
         <span id="world-status">3D WORLD STREAMING</span>
       </div>
+
+      <div class="hud-block telemetry">
+        <span id="g-long">+0.00g LONG</span>
+        <span id="g-lat">+0.00g LAT</span>
+        <span id="slip">0% WHEEL SLIP</span>
+        <span id="grip">0% GRIP</span>
+        <span id="drive">AWD • ABS • TCS</span>
+      </div>
+
       <div class="hud-actions">
         <button id="camera" type="button">CHASE</button>
         <button id="reset" type="button">RESET</button>
@@ -31,11 +42,12 @@
     </section>
 
     <section id="setup-card">
-      <p class="eyebrow">3D OPEN WORLD</p>
+      <p class="eyebrow">3D OPEN WORLD • VEHICLE DYNAMICS</p>
       <h1>GRAVEL RUSH: PHOENIX</h1>
       <p>
-        Phoenix is streamed from Google Maps Platform Photorealistic 3D Tiles.
-        Enter a Maps Tiles API key to load the real city.
+        Real Phoenix imagery is streamed through Google Maps Platform Photorealistic 3D Tiles.
+        The driving layer now simulates tire slip, load transfer, suspension, aerodynamics,
+        engine torque, gearing, AWD torque distribution, ABS and traction control.
       </p>
       <form id="key-form">
         <label for="api-key">Google Maps Tiles API key</label>
@@ -74,6 +86,11 @@
   </main>
 
   <script src="https://ajax.googleapis.com/ajax/libs/cesiumjs/1.105/Build/Cesium/Cesium.js"></script>
+  <script src="src/physics/math.js"></script>
+  <script src="src/physics/vehicle-config.js"></script>
+  <script src="src/physics/tire-model.js"></script>
+  <script src="src/physics/powertrain.js"></script>
+  <script src="src/physics/vehicle-dynamics.js"></script>
   <script src="src/phoenix.js"></script>
 </body>
 </html>
