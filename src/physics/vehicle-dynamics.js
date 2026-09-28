@@ -116,9 +116,16 @@ window.GravelRushPhysics = (() => {
 
     const trackMean = (c.trackFront + c.trackRear) * 0.5;
     const totalLateralTransfer = c.mass * state.previousAy * c.cgHeight / Math.max(trackMean, 0.1);
-    const frontShare = frontTotal / Math.max(frontTotal + rearTotal, 1);
-    const frontLatTransfer = totalLateralTransfer * frontShare;
-    const rearLatTransfer = totalLateralTransfer * (1 - frontShare);
+    // Distribute total lateral load transfer by axle roll stiffness. Springs and
+    // anti-roll bars change *where* load transfer occurs, not the total created by CG height.
+    const frontRollStiffness =
+      s.springRateFront * c.trackFront * c.trackFront * 0.5 + s.antiRollFront;
+    const rearRollStiffness =
+      s.springRateRear * c.trackRear * c.trackRear * 0.5 + s.antiRollRear;
+    const frontTransferShare = frontRollStiffness /
+      Math.max(frontRollStiffness + rearRollStiffness, 1);
+    const frontLatTransfer = totalLateralTransfer * frontTransferShare;
+    const rearLatTransfer = totalLateralTransfer * (1 - frontTransferShare);
 
     const targets = {
       fl: frontTotal * 0.5 + frontLatTransfer,
@@ -133,8 +140,12 @@ window.GravelRushPhysics = (() => {
     const leftGround = (state.wheels.fl.groundHeight + state.wheels.rl.groundHeight) * 0.5;
     const rightGround = (state.wheels.fr.groundHeight + state.wheels.rr.groundHeight) * 0.5;
 
-    state.roadPitch = Math.atan2(frontGround - rearGround, c.wheelbase);
-    state.roadRoll = Math.atan2(rightGround - leftGround, trackMean);
+    const roadSlopeLongitudinal = (frontGround - rearGround) / c.wheelbase;
+    const roadSlopeLateral = (rightGround - leftGround) / trackMean;
+    const roadPlaneAtCg = rearGround + c.cgToRear * roadSlopeLongitudinal;
+
+    state.roadPitch = Math.atan(roadSlopeLongitudinal);
+    state.roadRoll = Math.atan(roadSlopeLateral);
 
     for (const key of Object.keys(WHEEL_LAYOUT)) {
       const wheel = state.wheels[key];
@@ -147,9 +158,9 @@ window.GravelRushPhysics = (() => {
       wheel.targetLoad = Math.max(60, targets[key]);
 
       const pos = wheelPosition(c, key);
-      const planeHeight = avgGround +
-        pos.x * Math.tan(state.roadPitch) +
-        pos.y * Math.tan(state.roadRoll);
+      const planeHeight = roadPlaneAtCg +
+        pos.x * roadSlopeLongitudinal +
+        pos.y * roadSlopeLateral;
       const roadInput = M.clamp(wheel.groundHeight - planeHeight, -0.12, 0.12);
       let targetCompression = wheel.targetLoad / springRate + roadInput;
 
@@ -172,15 +183,6 @@ window.GravelRushPhysics = (() => {
         : 0;
       wheel.normalLoad = Math.max(40, dynamicLoad + bumpLoad);
     }
-
-    // Anti-roll bars couple left/right suspension travel at each axle. This does not
-    // create grip; it redistributes vertical load and therefore changes each tire's limit.
-    const frontArb = (state.wheels.fl.compression - state.wheels.fr.compression) * s.antiRollFront;
-    const rearArb = (state.wheels.rl.compression - state.wheels.rr.compression) * s.antiRollRear;
-    state.wheels.fl.normalLoad = Math.max(40, state.wheels.fl.normalLoad + frontArb);
-    state.wheels.fr.normalLoad = Math.max(40, state.wheels.fr.normalLoad - frontArb);
-    state.wheels.rl.normalLoad = Math.max(40, state.wheels.rl.normalLoad + rearArb);
-    state.wheels.rr.normalLoad = Math.max(40, state.wheels.rr.normalLoad - rearArb);
 
     const leftCompression = (state.wheels.fl.compression + state.wheels.rl.compression) * 0.5;
     const rightCompression = (state.wheels.fr.compression + state.wheels.rr.compression) * 0.5;
