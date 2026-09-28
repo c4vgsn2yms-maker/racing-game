@@ -68,8 +68,8 @@ window.GravelRushPowertrain = (() => {
     }
   }
 
-  function computeDriveTorque(config, state, wheels, longitudinalSpeed, inputs, dt) {
-    updateTransmission(config, state, wheels, longitudinalSpeed, inputs, dt);
+  function computeDriveTorque(config, state, wheels, longitudinalSpeed, vehicleSpeed, inputs, dt) {
+    updateTransmission(config, state, wheels, longitudinalSpeed, vehicleSpeed, inputs, dt);
 
     const ratio = gearRatio(config, state);
     const throttleCommand = state.reverse ? inputs.brake : inputs.throttle;
