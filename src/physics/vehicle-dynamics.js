@@ -244,6 +244,7 @@ window.GravelRushPhysics = (() => {
       state.powertrain,
       state.wheels,
       state.vx,
+      state.speed,
       inputs,
       dt
     );
@@ -333,12 +334,16 @@ window.GravelRushPhysics = (() => {
     // Mild aerodynamic / chassis yaw damping keeps very high-speed spins finite.
     yawMoment += -state.yawRate * (150 + speed * 12);
 
-    const axBody = sumFx / c.mass + state.yawRate * state.vy;
-    const ayBody = sumFy / c.mass - state.yawRate * state.vx;
+    const cgAx = sumFx / c.mass;
+    const cgAy = sumFy / c.mass;
+
+    // Body-coordinate velocity derivatives include the rotating-frame terms.
+    const du = cgAx + state.yawRate * state.vy;
+    const dv = cgAy - state.yawRate * state.vx;
     const yawAccel = yawMoment / c.yawInertia;
 
-    state.vx += axBody * dt;
-    state.vy += ayBody * dt;
+    state.vx += du * dt;
+    state.vy += dv * dt;
     state.yawRate += yawAccel * dt;
     state.heading += state.yawRate * dt;
 
@@ -349,15 +354,15 @@ window.GravelRushPhysics = (() => {
 
     state.previousAx = state.ax;
     state.previousAy = state.ay;
-    state.ax = axBody;
-    state.ay = ayBody;
+    state.ax = cgAx;
+    state.ay = cgAy;
     state.speed = Math.hypot(state.vx, state.vy);
 
     state.telemetry.maxSlipRatio = maxSlipRatio;
     state.telemetry.maxSlipAngle = maxSlipAngle;
     state.telemetry.gripUse = gripUse;
-    state.telemetry.longitudinalG = axBody / M.G;
-    state.telemetry.lateralG = ayBody / M.G;
+    state.telemetry.longitudinalG = cgAx / M.G;
+    state.telemetry.lateralG = cgAy / M.G;
 
     return state;
   }
