@@ -1,39 +1,38 @@
 # Racing Game Roadmap
 
-## Phase 1 — Handling foundation
+## Current milestone — Phoenix 3D open world
 
-The first browser build exists to tune driving feel before adding content.
+Implemented:
 
-- Responsive steering at low and medium speed
-- Distinct grip for gravel, loose dirt and asphalt
-- Handbrake rotation without instant spin-outs
-- Braking and reverse
-- Controller and touch support
-- Lap timing and reset/recovery
-- Basic opponent AI
+- CesiumJS 3D world renderer
+- Google Maps Platform Photorealistic 3D Tiles integration
+- Phoenix downtown world origin/spawn
+- Geodetic vehicle movement
+- Chase, hood and orbit cameras
+- Touch, keyboard and gamepad driving
+- Height sampling against rendered 3D geometry
+- Streaming world architecture
+- Preserved legacy 2D handling build
 
-## Phase 2 — Vehicle system
+## Next — Real vehicle physics
 
-Build vehicles from data instead of hard-coded handling.
+Move the player car from a simple geodetic bicycle model toward a proper rigid-body vehicle simulation:
 
-Suggested per-vehicle data:
-
-- mass
-- wheelbase
-- track width
-- drivetrain: FWD / RWD / AWD / 4WD
+- sprung and unsprung mass
+- four-wheel suspension raycasts
+- tire slip angle and longitudinal slip
+- weight transfer
 - engine torque curve
-- gear ratios
-- differential behavior
-- tire compound
-- suspension travel
-- ride height
-- brake balance
-- steering lock
-- aerodynamic drag
-- surface-specific grip multipliers
+- clutch and gearbox
+- FWD / RWD / AWD / selectable 4WD
+- open, limited-slip and locking differentials
+- ABS and traction control options
+- tire temperature / compound hooks
+- controller vibration / force feedback where supported
 
-Initial vehicle archetypes should include:
+Vehicle data should include mass, wheelbase, track width, suspension travel, center of mass, engine curve, gear ratios, final drive, steering lock, aero drag, tire parameters and surface grip.
+
+Initial fictional archetypes:
 
 1. Compact AWD rally sedan
 2. Lightweight AWD performance sedan
@@ -41,50 +40,59 @@ Initial vehicle archetypes should include:
 4. Short-wheelbase RWD pickup
 5. Lightweight RWD coupe
 
-These should be original fictional vehicles rather than copies of real manufacturers.
+## Phoenix gameplay layer
 
-## Phase 3 — Track and terrain
+Google Photorealistic 3D Tiles stay as the streamed visual environment.
 
-- Dirt roads
-- Gravel roads
-- Asphalt
-- Mud
-- Sand
-- Water crossings
-- Elevation changes
-- Jumps
-- Ruts and surface deformation
-- Trackside collision
-- Checkpoints and route validation
-- Point-to-point rally stages
-- Circuit racing
+Do **not** scrape, trace or convert Google map content into a permanent gameplay dataset.
 
-## Phase 4 — 3D version
+Add independently licensed/open or authored gameplay layers for:
 
-Target features for the full 3D build:
+- road centerlines and road classes
+- drivable-surface classification
+- traffic lanes
+- intersections and signals
+- speed zones
+- spawn points
+- route planning
+- race routes
+- garages
+- dealerships
+- fuel/charging locations
+- police and traffic AI routing
+- collision proxies where needed
 
-- First-person cockpit camera
-- Third-person chase camera
-- Hood/bumper camera
-- Functional suspension
-- Wheel slip and surface response
-- Dust, mud and gravel particles
-- Damage and detachable cosmetic parts
-- Weather and wet-surface grip
-- Day/night cycle
-- Manual and automatic transmission
-- Controller vibration / force feedback where supported
+This lets the game retain real Phoenix geography without treating streamed Google content as owned game assets.
 
-## Phase 5 — Game structure
+## World systems
 
-- Garage
-- Vehicle purchase/unlock progression
-- Upgrades and tuning
-- Race events
-- Rally stages
-- Off-road events
-- Time trials
-- AI championships
-- Player records
-- Difficulty settings
-- Save system
+- seamless city streaming
+- traffic
+- pedestrians where appropriate
+- day/night cycle
+- Arizona weather
+- dust
+- rain and wet-road grip
+- destructible lightweight props
+- vehicle damage
+- towing/recovery
+- garages and vehicle storage
+- fuel/energy system as an optional realism setting
+
+## Events
+
+- street circuits
+- point-to-point city races
+- highway runs
+- mountain-road time trials
+- dirt/desert rally stages
+- off-road trails
+- drag racing
+- delivery/driving jobs
+- free-roam challenges
+
+## Engine direction
+
+The browser/Cesium build is useful for validating the real-world map streaming and game design.
+
+For the full physics-heavy version, Unreal Engine + Cesium for Unreal is the preferred production path because it can combine the same Google Photorealistic 3D Tiles stream with Unreal's vehicle physics, collision systems, AI, world gameplay and rendering.
