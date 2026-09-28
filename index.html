@@ -3,35 +3,62 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
-  <meta name="theme-color" content="#111318" />
-  <title>Gravel Rush</title>
+  <meta name="theme-color" content="#0b0d10" />
+  <title>Gravel Rush — Phoenix Open World</title>
+  <link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/cesiumjs/1.105/Build/Cesium/Widgets/widgets.css" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <main id="game-shell">
-    <canvas id="game" aria-label="Gravel Rush racing game"></canvas>
+    <div id="cesiumContainer" aria-label="3D open world view of Phoenix, Arizona"></div>
 
-    <section id="hud" aria-live="polite">
-      <div class="hud-group">
-        <strong id="speed">0 mph</strong>
-        <span id="surface">GRAVEL</span>
+    <section id="hud" class="hidden" aria-live="polite">
+      <div class="hud-block drive">
+        <strong id="speed">0</strong>
+        <span class="unit">MPH</span>
+        <span id="gear">D</span>
       </div>
-      <div class="hud-center">
-        <span id="lap">Lap 1 / 3</span>
-        <strong id="timer">00:00.000</strong>
-        <span id="best">Best --:--.---</span>
+      <div class="hud-block world">
+        <strong>PHOENIX, AZ</strong>
+        <span id="coords">33.44838, -112.07404</span>
+        <span id="world-status">3D WORLD STREAMING</span>
       </div>
-      <button id="reset" type="button">RESET</button>
+      <div class="hud-actions">
+        <button id="camera" type="button">CHASE</button>
+        <button id="reset" type="button">RESET</button>
+        <button id="map-key" type="button">MAP KEY</button>
+      </div>
     </section>
 
-    <section id="start-card">
-      <h1>GRAVEL RUSH</h1>
-      <p>Fast, loose, and built for dirt.</p>
-      <button id="start" type="button">START RACE</button>
-      <small>Keyboard, controller, and touch supported.</small>
+    <section id="setup-card">
+      <p class="eyebrow">3D OPEN WORLD</p>
+      <h1>GRAVEL RUSH: PHOENIX</h1>
+      <p>
+        Phoenix is streamed from Google Maps Platform Photorealistic 3D Tiles.
+        Enter a Maps Tiles API key to load the real city.
+      </p>
+      <form id="key-form">
+        <label for="api-key">Google Maps Tiles API key</label>
+        <input id="api-key" type="password" autocomplete="off" spellcheck="false" placeholder="AIza…" required />
+        <button type="submit">LOAD PHOENIX</button>
+      </form>
+      <p id="setup-status" role="status"></p>
+      <small>
+        The key is kept only for this browser session. Use a referrer-restricted key with billing and the Maps Tiles API enabled.
+      </small>
+      <a href="legacy.html">Open the original 2D handling prototype</a>
     </section>
 
-    <section id="touch-controls" aria-label="Touch driving controls">
+    <section id="help" class="hidden">
+      <span>W / ↑ throttle</span>
+      <span>S / ↓ brake & reverse</span>
+      <span>A D / ← → steer</span>
+      <span>Space handbrake</span>
+      <span>C camera</span>
+      <span>R reset</span>
+    </section>
+
+    <section id="touch-controls" class="hidden" aria-label="Touch driving controls">
       <div class="touch-cluster steering">
         <button data-control="left" aria-label="Steer left">◀</button>
         <button data-control="right" aria-label="Steer right">▶</button>
@@ -42,8 +69,11 @@
         <button data-control="throttle" class="throttle" aria-label="Throttle">GAS</button>
       </div>
     </section>
+
+    <div id="error-banner" class="hidden" role="alert"></div>
   </main>
 
-  <script src="src/game.js"></script>
+  <script src="https://ajax.googleapis.com/ajax/libs/cesiumjs/1.105/Build/Cesium/Cesium.js"></script>
+  <script src="src/phoenix.js"></script>
 </body>
 </html>
