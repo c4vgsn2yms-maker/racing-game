@@ -10,6 +10,7 @@ const PHOENIX_SPAWN = {
 const METERS_PER_DEGREE_LAT = 111320;
 const MPH_PER_MPS = 2.2369362921;
 const CAMERA_MODES = ['CHASE', 'HOOD', 'ORBIT'];
+const VEHICLE_BODY_HALF_HEIGHT = 0.69;
 
 const ui = {
   setup: document.getElementById('setup-card'),
@@ -19,8 +20,14 @@ const ui = {
   hud: document.getElementById('hud'),
   speed: document.getElementById('speed'),
   gear: document.getElementById('gear'),
+  rpm: document.getElementById('rpm'),
   coords: document.getElementById('coords'),
   worldStatus: document.getElementById('world-status'),
+  gLong: document.getElementById('g-long'),
+  gLat: document.getElementById('g-lat'),
+  slip: document.getElementById('slip'),
+  grip: document.getElementById('grip'),
+  drive: document.getElementById('drive'),
   camera: document.getElementById('camera'),
   reset: document.getElementById('reset'),
   mapKey: document.getElementById('map-key'),
@@ -32,23 +39,6 @@ const ui = {
 const keys = new Set();
 const touch = new Set();
 
-const car = {
-  latitude: PHOENIX_SPAWN.latitude,
-  longitude: PHOENIX_SPAWN.longitude,
-  height: PHOENIX_SPAWN.height + 1.1,
-  targetGroundHeight: PHOENIX_SPAWN.height,
-  heading: PHOENIX_SPAWN.heading,
-  speed: 0,
-  steering: 0,
-  wheelbase: 2.62,
-  maxForward: 62,
-  maxReverse: 13,
-  acceleration: 9.2,
-  reverseAcceleration: 5.2,
-  brakePower: 16.5,
-  handbrakePower: 8.5
-};
-
 let viewer = null;
 let tileset = null;
 let carEntity = null;
@@ -58,6 +48,26 @@ let lastFrame = performance.now();
 let lastHeightProbe = 0;
 let heightProbePending = false;
 let apiKey = '';
+let statusTimer = 0;
+
+let world = {
+  latitude: PHOENIX_SPAWN.latitude,
+  longitude: PHOENIX_SPAWN.longitude
+};
+
+let vehicle = null;
+
+function createVehicleState() {
+  const state = GravelRushPhysics.createVehicle(GravelRushVehicleConfig);
+  state.heading = PHOENIX_SPAWN.heading;
+  GravelRushPhysics.setGroundHeights(state, {
+    fl: PHOENIX_SPAWN.height,
+    fr: PHOENIX_SPAWN.height,
+    rl: PHOENIX_SPAWN.height,
+    rr: PHOENIX_SPAWN.height
+  });
+  return state;
+}
 
 function showError(message) {
   ui.error.textContent = message;
@@ -73,21 +83,24 @@ function setSetup(message) {
   ui.setupStatus.textContent = message || '';
 }
 
+function setWorldStatus(message, duration = 0) {
+  ui.worldStatus.textContent = message;
+  statusTimer = duration;
+}
+
 function resetCar() {
-  car.latitude = PHOENIX_SPAWN.latitude;
-  car.longitude = PHOENIX_SPAWN.longitude;
-  car.height = PHOENIX_SPAWN.height + 1.1;
-  car.targetGroundHeight = PHOENIX_SPAWN.height;
-  car.heading = PHOENIX_SPAWN.heading;
-  car.speed = 0;
-  car.steering = 0;
+  world.latitude = PHOENIX_SPAWN.latitude;
+  world.longitude = PHOENIX_SPAWN.longitude;
+  vehicle = createVehicleState();
+  if (carEntity) updateCarEntity();
+  probeWheelGround(true);
+  setCamera(true);
 }
 
 function destroyWorld() {
   running = false;
-  if (viewer && !viewer.isDestroyed()) {
-    viewer.destroy();
-  }
+  heightProbePending = false;
+  if (viewer && !viewer.isDestroyed()) viewer.destroy();
   viewer = null;
   tileset = null;
   carEntity = null;
@@ -131,17 +144,17 @@ function initializeWorld(key) {
   tileset = viewer.scene.primitives.add(new Cesium.Cesium3DTileset({
     url: 'https://tile.googleapis.com/v1/3dtiles/root.json?key=' + encodeURIComponent(apiKey),
     showCreditsOnScreen: true,
-    maximumScreenSpaceError: 14,
+    maximumScreenSpaceError: 12,
     dynamicScreenSpaceError: true
   }));
 
+  resetCar();
+
+  const startPosition = vehiclePosition();
   carEntity = viewer.entities.add({
-    name: 'Player Vehicle',
-    position: Cesium.Cartesian3.fromDegrees(car.longitude, car.latitude, car.height),
-    orientation: Cesium.Transforms.headingPitchRollQuaternion(
-      Cesium.Cartesian3.fromDegrees(car.longitude, car.latitude, car.height),
-      new Cesium.HeadingPitchRoll(car.heading, 0, 0)
-    ),
+    name: GravelRushVehicleConfig.name,
+    position: startPosition,
+    orientation: vehicleOrientation(startPosition),
     box: {
       dimensions: new Cesium.Cartesian3(1.88, 4.45, 1.38),
       material: Cesium.Color.fromCssColorString('#f2b84b'),
@@ -150,7 +163,6 @@ function initializeWorld(key) {
     }
   });
 
-  resetCar();
   updateCarEntity();
   setCamera(true);
 
@@ -158,18 +170,19 @@ function initializeWorld(key) {
     try {
       sessionStorage.setItem('gravelRushGoogleTilesKey', apiKey);
     } catch (_) {}
+
     ui.setup.classList.add('hidden');
     ui.hud.classList.remove('hidden');
     ui.help.classList.remove('hidden');
     ui.touch.classList.remove('hidden');
-    ui.worldStatus.textContent = 'PHOTOREALISTIC 3D TILES LIVE';
+    setWorldStatus('PHOTOREALISTIC 3D TILES LIVE');
     running = true;
     lastFrame = performance.now();
     requestAnimationFrame(frame);
-    probeGroundHeight(true);
+    probeWheelGround(true);
   }).catch((error) => {
     console.error(error);
-    setSetup('Could not load Google 3D Tiles. Check that billing is active, the Maps Tiles API is enabled, and the key restrictions allow this site.');
+    setSetup('Could not load Google 3D Tiles. Check billing, Map Tiles API access, and key restrictions.');
     try { sessionStorage.removeItem('gravelRushGoogleTilesKey'); } catch (_) {}
     destroyWorld();
   });
@@ -196,139 +209,197 @@ function readInput() {
   return { throttle, brake, steer, handbrake };
 }
 
-function updatePhysics(dt) {
-  const input = readInput();
-  const absSpeed = Math.abs(car.speed);
-
-  if (input.throttle > 0) {
-    if (car.speed < -0.5) {
-      car.speed += car.brakePower * input.throttle * dt;
-    } else {
-      const powerFade = 1 - Math.min(Math.max(car.speed, 0) / car.maxForward, 1) * 0.7;
-      car.speed += car.acceleration * powerFade * input.throttle * dt;
-    }
-  }
-
-  if (input.brake > 0) {
-    if (car.speed > 0.7) {
-      car.speed -= car.brakePower * input.brake * dt;
-    } else {
-      car.speed -= car.reverseAcceleration * input.brake * dt;
-    }
-  }
-
-  const rollingResistance = 0.55 + absSpeed * 0.018;
-  if (Math.abs(car.speed) > 0.02) {
-    const resistance = Math.min(Math.abs(car.speed), rollingResistance * dt);
-    car.speed -= Math.sign(car.speed) * resistance;
-  } else if (!input.throttle && !input.brake) {
-    car.speed = 0;
-  }
-
-  if (input.handbrake) {
-    car.speed -= Math.sign(car.speed) * Math.min(Math.abs(car.speed), car.handbrakePower * dt);
-  }
-
-  car.speed = Math.max(-car.maxReverse, Math.min(car.maxForward, car.speed));
-
-  const speedRatio = Math.min(absSpeed / 36, 1);
-  const maxSteer = Cesium.Math.toRadians(34 - speedRatio * 20);
-  car.steering += (input.steer * maxSteer - car.steering) * Math.min(1, dt * 9);
-
-  if (Math.abs(car.speed) > 0.08) {
-    const yawRate = (car.speed / car.wheelbase) * Math.tan(car.steering);
-    const handbrakeYaw = input.handbrake ? input.steer * Math.min(absSpeed / 12, 1) * 0.55 : 0;
-    car.heading += (yawRate + handbrakeYaw) * dt;
-  }
-
-  car.heading = Cesium.Math.zeroToTwoPi(car.heading);
-
-  const northMeters = Math.cos(car.heading) * car.speed * dt;
-  const eastMeters = Math.sin(car.heading) * car.speed * dt;
-  const metersPerDegreeLon = METERS_PER_DEGREE_LAT * Math.cos(Cesium.Math.toRadians(car.latitude));
-
-  car.latitude += northMeters / METERS_PER_DEGREE_LAT;
-  car.longitude += eastMeters / Math.max(metersPerDegreeLon, 1);
-
-  const targetCarHeight = car.targetGroundHeight + 1.05;
-  car.height += (targetCarHeight - car.height) * Math.min(1, dt * 7);
+function metersToGeo(northMeters, eastMeters, latitude = world.latitude) {
+  const metersPerDegreeLon = METERS_PER_DEGREE_LAT * Math.cos(Cesium.Math.toRadians(latitude));
+  return {
+    latitude: northMeters / METERS_PER_DEGREE_LAT,
+    longitude: eastMeters / Math.max(metersPerDegreeLon, 1)
+  };
 }
 
-function updateCarEntity() {
-  if (!carEntity) return;
+function localOffsetToGeo(forwardMeters, rightMeters) {
+  const c = Math.cos(vehicle.heading);
+  const s = Math.sin(vehicle.heading);
+  const north = c * forwardMeters - s * rightMeters;
+  const east = s * forwardMeters + c * rightMeters;
+  const delta = metersToGeo(north, east);
+  return {
+    latitude: world.latitude + delta.latitude,
+    longitude: world.longitude + delta.longitude
+  };
+}
 
-  const position = Cesium.Cartesian3.fromDegrees(car.longitude, car.latitude, car.height);
-  carEntity.position = position;
-  carEntity.orientation = Cesium.Transforms.headingPitchRollQuaternion(
-    position,
-    new Cesium.HeadingPitchRoll(car.heading, 0, 0)
+function integrateWorldPosition(dt) {
+  const c = Math.cos(vehicle.heading);
+  const s = Math.sin(vehicle.heading);
+
+  const northVelocity = c * vehicle.vx - s * vehicle.vy;
+  const eastVelocity = s * vehicle.vx + c * vehicle.vy;
+
+  const delta = metersToGeo(northVelocity * dt, eastVelocity * dt);
+  world.latitude += delta.latitude;
+  world.longitude += delta.longitude;
+}
+
+function vehicleAltitude() {
+  return vehicle.groundHeight + VEHICLE_BODY_HALF_HEIGHT + Math.max(vehicle.bodyHeightOffset, 0.04);
+}
+
+function vehiclePosition() {
+  return Cesium.Cartesian3.fromDegrees(
+    world.longitude,
+    world.latitude,
+    vehicleAltitude()
   );
 }
 
-function probeGroundHeight(force = false) {
-  if (!viewer || heightProbePending) return;
+function vehicleOrientation(position) {
+  return Cesium.Transforms.headingPitchRollQuaternion(
+    position,
+    new Cesium.HeadingPitchRoll(
+      vehicle.heading,
+      vehicle.pitch,
+      vehicle.roll
+    )
+  );
+}
+
+function updateCarEntity() {
+  if (!carEntity || !vehicle) return;
+  const position = vehiclePosition();
+  carEntity.position = position;
+  carEntity.orientation = vehicleOrientation(position);
+}
+
+function buildWheelProbePoints() {
+  return ['fl', 'fr', 'rl', 'rr'].map((key) => {
+    const p = GravelRushPhysics.wheelPosition(GravelRushVehicleConfig, key);
+    const geo = localOffsetToGeo(p.x, p.y);
+    return {
+      key,
+      cartographic: Cesium.Cartographic.fromDegrees(
+        geo.longitude,
+        geo.latitude,
+        vehicle.groundHeight + 8
+      )
+    };
+  });
+}
+
+function handleGroundResults(probes, result, force) {
+  const heights = {};
+  for (let i = 0; i < probes.length; i++) {
+    const height = result && result[i] && result[i].height;
+    if (Number.isFinite(height)) heights[probes[i].key] = height;
+  }
+
+  const valid = Object.values(heights);
+  if (!valid.length) return;
+
+  const front = [heights.fl, heights.fr].filter(Number.isFinite);
+  const rear = [heights.rl, heights.rr].filter(Number.isFinite);
+  const frontAvg = front.length ? front.reduce((a,b) => a+b,0) / front.length : vehicle.groundHeight;
+  const rearAvg = rear.length ? rear.reduce((a,b) => a+b,0) / rear.length : vehicle.groundHeight;
+
+  // Google 3D Tiles are a visual surface, not a game collision mesh.
+  // Treat an abrupt near-vertical height change across one wheelbase as a solid obstacle proxy.
+  const abruptStep = !force &&
+    Math.abs(vehicle.vx) > 2 &&
+    frontAvg - rearAvg > 1.45;
+
+  if (abruptStep) {
+    vehicle.vx *= -0.07;
+    vehicle.vy *= 0.30;
+    vehicle.yawRate *= 0.35;
+    setWorldStatus('OBSTACLE IMPACT', 1.2);
+    return;
+  }
+
+  GravelRushPhysics.setGroundHeights(vehicle, heights);
+}
+
+function probeWheelGround(force = false) {
+  if (!viewer || !vehicle || heightProbePending) return;
+
   const now = performance.now();
-  if (!force && now - lastHeightProbe < 260) return;
+  if (!force && now - lastHeightProbe < 90) return;
+
   lastHeightProbe = now;
   heightProbePending = true;
+  const probes = buildWheelProbePoints();
+  const cartographics = probes.map(p => p.cartographic);
 
-  const sample = Cesium.Cartographic.fromDegrees(car.longitude, car.latitude, car.height + 120);
-
-  viewer.scene.sampleHeightMostDetailed([sample]).then((result) => {
-    const sampled = result && result[0] && result[0].height;
-    if (Number.isFinite(sampled)) {
-      const delta = sampled - car.targetGroundHeight;
-      if (Math.abs(delta) < 12 || Math.abs(car.speed) < 2 || force) {
-        car.targetGroundHeight = sampled;
-      } else if (delta > 12) {
-        // A sudden large rise is treated as an obstacle rather than teleporting the car onto a roof.
-        car.speed *= -0.08;
-      }
-    }
+  viewer.scene.sampleHeightMostDetailed(cartographics).then((result) => {
+    handleGroundResults(probes, result, force);
   }).catch(() => {
-    // Keep the most recent valid ground height if the local tile is not ready yet.
+    // Tiles can be temporarily unavailable while a neighborhood streams in.
   }).finally(() => {
     heightProbePending = false;
   });
 }
 
 function setCamera(immediate = false) {
-  if (!viewer || !carEntity) return;
+  if (!viewer || !vehicle) return;
 
   const mode = CAMERA_MODES[cameraModeIndex];
   ui.camera.textContent = mode;
-  const position = Cesium.Cartesian3.fromDegrees(car.longitude, car.latitude, car.height + 0.7);
+  const position = vehiclePosition();
 
   if (mode === 'CHASE') {
-    const range = 20 + Math.min(Math.abs(car.speed) * 0.35, 15);
+    const range = 17 + Math.min(vehicle.speed * 0.34, 17);
     viewer.camera.lookAt(
       position,
-      new Cesium.HeadingPitchRange(car.heading + Math.PI, Cesium.Math.toRadians(-18), range)
+      new Cesium.HeadingPitchRange(
+        vehicle.heading + Math.PI,
+        Cesium.Math.toRadians(-15),
+        range
+      )
     );
   } else if (mode === 'HOOD') {
     viewer.camera.lookAt(
       position,
-      new Cesium.HeadingPitchRange(car.heading + Math.PI, Cesium.Math.toRadians(-4), 2.7)
+      new Cesium.HeadingPitchRange(
+        vehicle.heading + Math.PI,
+        Cesium.Math.toRadians(-2),
+        2.65
+      )
     );
   } else if (immediate) {
     viewer.camera.lookAt(
       position,
-      new Cesium.HeadingPitchRange(car.heading + Math.PI, Cesium.Math.toRadians(-35), 55)
+      new Cesium.HeadingPitchRange(
+        vehicle.heading + Math.PI,
+        Cesium.Math.toRadians(-34),
+        52
+      )
     );
   }
 }
 
 function updateCamera() {
-  if (!viewer) return;
-  const mode = CAMERA_MODES[cameraModeIndex];
-  if (mode === 'ORBIT') return;
+  if (!viewer || CAMERA_MODES[cameraModeIndex] === 'ORBIT') return;
   setCamera(false);
 }
 
-function updateHUD() {
-  ui.speed.textContent = String(Math.round(Math.abs(car.speed) * MPH_PER_MPS));
-  ui.gear.textContent = car.speed < -0.5 ? 'R' : (Math.abs(car.speed) < 0.25 ? 'N' : 'D');
-  ui.coords.textContent = car.latitude.toFixed(5) + ', ' + car.longitude.toFixed(5);
+function updateHUD(dt) {
+  const t = vehicle.telemetry;
+  const p = vehicle.powertrain;
+  const displayGear = p.reverse ? 'R' : (Math.abs(vehicle.vx) < 0.15 ? 'N' : String(p.gear));
+
+  ui.speed.textContent = String(Math.round(vehicle.speed * MPH_PER_MPS));
+  ui.gear.textContent = displayGear;
+  ui.rpm.textContent = Math.round(p.engineRPM / 50) * 50 + ' RPM';
+  ui.coords.textContent = world.latitude.toFixed(5) + ', ' + world.longitude.toFixed(5);
+  ui.gLong.textContent = (t.longitudinalG >= 0 ? '+' : '') + t.longitudinalG.toFixed(2) + 'g LONG';
+  ui.gLat.textContent = (t.lateralG >= 0 ? '+' : '') + t.lateralG.toFixed(2) + 'g LAT';
+  ui.slip.textContent = Math.round(t.maxSlipRatio * 100) + '% WHEEL SLIP';
+  ui.grip.textContent = Math.round(t.gripUse * 100) + '% GRIP';
+  ui.drive.textContent = GravelRushVehicleConfig.powertrain.drivetrain + ' • ABS • TCS';
+
+  if (statusTimer > 0) {
+    statusTimer -= dt;
+    if (statusTimer <= 0) setWorldStatus('PHOTOREALISTIC 3D TILES LIVE');
+  }
 }
 
 function changeCamera() {
@@ -337,16 +408,27 @@ function changeCamera() {
 }
 
 function frame(now) {
-  if (!running || !viewer || viewer.isDestroyed()) return;
+  if (!running || !viewer || viewer.isDestroyed() || !vehicle) return;
 
-  const dt = Math.min((now - lastFrame) / 1000, 0.04);
+  const dt = Math.min((now - lastFrame) / 1000, 0.033);
   lastFrame = now;
 
-  updatePhysics(dt);
+  const inputs = readInput();
+
+  // Substep the physics so tire and suspension forces remain stable during frame-time spikes.
+  const targetSubstep = 1 / 120;
+  const substeps = Math.max(1, Math.ceil(dt / targetSubstep));
+  const subDt = dt / substeps;
+
+  for (let i = 0; i < substeps; i++) {
+    GravelRushPhysics.step(vehicle, inputs, subDt);
+    integrateWorldPosition(subDt);
+  }
+
+  probeWheelGround();
   updateCarEntity();
-  probeGroundHeight();
   updateCamera();
-  updateHUD();
+  updateHUD(dt);
 
   requestAnimationFrame(frame);
 }
@@ -357,12 +439,8 @@ ui.form.addEventListener('submit', (event) => {
 });
 
 ui.camera.addEventListener('click', changeCamera);
-ui.reset.addEventListener('click', () => {
-  resetCar();
-  updateCarEntity();
-  probeGroundHeight(true);
-  setCamera(true);
-});
+ui.reset.addEventListener('click', resetCar);
+
 ui.mapKey.addEventListener('click', () => {
   destroyWorld();
   ui.hud.classList.add('hidden');
@@ -375,15 +453,12 @@ ui.mapKey.addEventListener('click', () => {
 
 window.addEventListener('keydown', (event) => {
   keys.add(event.code);
+
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space'].includes(event.code)) {
     event.preventDefault();
   }
-  if (event.code === 'KeyR') {
-    resetCar();
-    updateCarEntity();
-    probeGroundHeight(true);
-    setCamera(true);
-  }
+
+  if (event.code === 'KeyR' && !event.repeat) resetCar();
   if (event.code === 'KeyC' && !event.repeat) changeCamera();
 });
 
@@ -413,6 +488,8 @@ document.querySelectorAll('[data-control]').forEach((button) => {
   button.addEventListener('pointercancel', release);
   button.addEventListener('pointerleave', release);
 });
+
+vehicle = createVehicleState();
 
 try {
   const saved = sessionStorage.getItem('gravelRushGoogleTilesKey');
