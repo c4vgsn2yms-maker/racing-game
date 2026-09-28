@@ -28,6 +28,7 @@ const ui = {
   slip: document.getElementById('slip'),
   grip: document.getElementById('grip'),
   drive: document.getElementById('drive'),
+  controllerStatus: document.getElementById('controller-status'),
   camera: document.getElementById('camera'),
   reset: document.getElementById('reset'),
   mapKey: document.getElementById('map-key'),
@@ -49,6 +50,9 @@ let lastHeightProbe = 0;
 let heightProbePending = false;
 let apiKey = '';
 let statusTimer = 0;
+let cameraLookX = 0;
+let cameraLookY = 0;
+let lastControllerInput = null;
 
 let world = {
   latitude: PHOENIX_SPAWN.latitude,
@@ -189,24 +193,52 @@ function initializeWorld(key) {
 }
 
 function readInput() {
-  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
-  const pad = Array.from(pads).find(Boolean);
-
   let throttle = (keys.has('KeyW') || keys.has('ArrowUp') || touch.has('throttle')) ? 1 : 0;
   let brake = (keys.has('KeyS') || keys.has('ArrowDown') || touch.has('brake')) ? 1 : 0;
   let steer = ((keys.has('KeyD') || keys.has('ArrowRight') || touch.has('right')) ? 1 : 0)
     - ((keys.has('KeyA') || keys.has('ArrowLeft') || touch.has('left')) ? 1 : 0);
   let handbrake = keys.has('Space') || touch.has('handbrake');
 
-  if (pad) {
-    const stick = Math.abs(pad.axes[0] || 0) > 0.12 ? pad.axes[0] : 0;
-    steer = Math.max(-1, Math.min(1, steer + stick));
-    if (pad.buttons[7]) throttle = Math.max(throttle, pad.buttons[7].value);
-    if (pad.buttons[6]) brake = Math.max(brake, pad.buttons[6].value);
-    handbrake = handbrake || Boolean(pad.buttons[0] && pad.buttons[0].pressed);
+  const controller = window.GravelRushGamepad
+    ? GravelRushGamepad.read()
+    : null;
+
+  if (controller && controller.connected) {
+    throttle = Math.max(throttle, controller.throttle);
+    brake = Math.max(brake, controller.brake);
+    steer = Math.max(-1, Math.min(1, steer + controller.steer));
+    handbrake = handbrake || controller.handbrake;
   }
 
-  return { throttle, brake, steer, handbrake };
+  lastControllerInput = controller;
+
+  return {
+    throttle,
+    brake,
+    steer,
+    handbrake,
+    controller
+  };
+}
+
+function updateControllerActions(controller, dt) {
+  const connected = Boolean(controller && controller.connected);
+
+  if (connected) {
+    if (controller.cameraPressed) changeCamera();
+    if (controller.resetPressed) resetCar();
+
+    const targetLookX = controller.lookX || 0;
+    const targetLookY = controller.lookY || 0;
+    const response = Math.min(1, dt * 10);
+
+    cameraLookX += (targetLookX - cameraLookX) * response;
+    cameraLookY += (targetLookY - cameraLookY) * response;
+  } else {
+    const returnRate = Math.min(1, dt * 8);
+    cameraLookX += (0 - cameraLookX) * returnRate;
+    cameraLookY += (0 - cameraLookY) * returnRate;
+  }
 }
 
 function metersToGeo(northMeters, eastMeters, latitude = world.latitude) {
@@ -345,13 +377,16 @@ function setCamera(immediate = false) {
   ui.camera.textContent = mode;
   const position = vehiclePosition();
 
+  const lookHeading = cameraLookX * Cesium.Math.toRadians(62);
+  const lookPitch = cameraLookY * Cesium.Math.toRadians(18);
+
   if (mode === 'CHASE') {
     const range = 17 + Math.min(vehicle.speed * 0.34, 17);
     viewer.camera.lookAt(
       position,
       new Cesium.HeadingPitchRange(
-        vehicle.heading + Math.PI,
-        Cesium.Math.toRadians(-15),
+        vehicle.heading + Math.PI + lookHeading,
+        Cesium.Math.toRadians(-15) + lookPitch,
         range
       )
     );
@@ -359,8 +394,8 @@ function setCamera(immediate = false) {
     viewer.camera.lookAt(
       position,
       new Cesium.HeadingPitchRange(
-        vehicle.heading + Math.PI,
-        Cesium.Math.toRadians(-2),
+        vehicle.heading + Math.PI + lookHeading,
+        Cesium.Math.toRadians(-2) + lookPitch,
         2.65
       )
     );
@@ -396,6 +431,16 @@ function updateHUD(dt) {
   ui.grip.textContent = Math.round(t.gripUse * 100) + '% GRIP';
   ui.drive.textContent = GravelRushVehicleConfig.powertrain.drivetrain + ' • ABS • TCS';
 
+  if (ui.controllerStatus) {
+    if (lastControllerInput && lastControllerInput.connected) {
+      ui.controllerStatus.textContent =
+        'CONTROLLER CONNECTED' +
+        (lastControllerInput.hapticsAvailable ? ' • HAPTICS' : '');
+    } else {
+      ui.controllerStatus.textContent = 'CONTROLLER: NOT CONNECTED';
+    }
+  }
+
   if (statusTimer > 0) {
     statusTimer -= dt;
     if (statusTimer <= 0) setWorldStatus('PHOTOREALISTIC 3D TILES LIVE');
@@ -414,6 +459,7 @@ function frame(now) {
   lastFrame = now;
 
   const inputs = readInput();
+  updateControllerActions(inputs.controller, dt);
 
   // Substep the physics so tire and suspension forces remain stable during frame-time spikes.
   const targetSubstep = 1 / 120;
@@ -429,6 +475,10 @@ function frame(now) {
   updateCarEntity();
   updateCamera();
   updateHUD(dt);
+
+  if (window.GravelRushGamepad) {
+    GravelRushGamepad.updateVehicleHaptics(vehicle, inputs, now);
+  }
 
   requestAnimationFrame(frame);
 }
