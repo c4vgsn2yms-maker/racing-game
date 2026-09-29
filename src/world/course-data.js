@@ -4,7 +4,7 @@ window.GravelRushTracks = (() => {
   const ORIGIN = {
     latitude: 34.25,
     longitude: -112.10,
-    height: 420
+    height: 30
   };
 
   const SURFACES = {
