@@ -275,7 +275,7 @@ function buildCar() {
     position,
     orientation:vehicleOrientation(position),
     model:{
-      uri:'assets/grx-rally.gltf?v=grx-model-1',
+      uri:'assets/grx-rally.gltf?v=grx-axis-2',
       scale:1,
       minimumPixelSize:96,
       maximumScale:4,
@@ -501,7 +501,7 @@ function aimCamera(cameraLocal,targetLocal,roll=0) {
 function setCamera() {
   if(!viewer||!vehicle) return;
   const first=CAMERA_MODES[cameraModeIndex]==='FIRST PERSON';
-  ui.camera.textContent=CAMERA_MODES[cameraModeIndex];
+  ui.camera.textContent=first?'VIEW: DRIVER':'VIEW: CHASE';
   if(carModelEntity) carModelEntity.show=!first;
   if(carFallbackEntity) carFallbackEntity.show=!first;
   for(const p of cockpitParts) p.entity.show=first;
@@ -510,32 +510,36 @@ function setCamera() {
   const center=vehicleAltitude();
 
   if(first) {
-    const cam=offsetFromVehicle(.06,-.38);
-    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(76);
-    const distance=35;
+    // Driver eye position inside the left-hand seat, behind the dashboard.
+    const cam=offsetFromVehicle(-.12,-.38);
+    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(62);
+    const distance=32;
     aimCamera(
-      {x:cam.x,y:cam.y,z:ground+1.20},
+      {x:cam.x,y:cam.y,z:ground+1.23},
       {
         x:cam.x+Math.sin(heading)*distance,
         y:cam.y+Math.cos(heading)*distance,
-        z:ground+1.20+Math.tan(vehicle.pitch)*distance-cameraLookY*7
+        z:ground+1.23+Math.tan(vehicle.pitch)*distance-cameraLookY*5.2
       },
       vehicle.roll
     );
   } else {
-    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(60);
-    const distance=6.2+Math.min(vehicle.speed*.04,1.8);
+    // Fixed chase mount centered directly behind the vehicle.
+    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(48);
+    const distance=7.8+Math.min(vehicle.speed*.025,1.2);
     const x=worldPosition.x-Math.sin(heading)*distance;
     const y=worldPosition.y-Math.cos(heading)*distance;
     aimCamera(
-      {x,y,z:Math.max(course.heightAt(x,y)+1.8,center+1.3)},
-      {x:worldPosition.x,y:worldPosition.y,z:center+.12-cameraLookY*3}
+      {x,y,z:Math.max(course.heightAt(x,y)+2.15,center+1.75)},
+      {x:worldPosition.x,y:worldPosition.y,z:center+.36-cameraLookY*2.2}
     );
   }
 }
 
 function changeCamera() {
   cameraModeIndex=(cameraModeIndex+1)%CAMERA_MODES.length;
+  cameraLookX=0;
+  cameraLookY=0;
   setCamera();
 }
 
