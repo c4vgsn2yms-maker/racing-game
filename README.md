@@ -19,11 +19,15 @@ Each course uses only 88–96 spline samples and one or two surface materials.
 
 ## Vehicle
 
-The default vehicle is the custom **GRX Rally Coupe**, assembled directly in the game from body, hood, cabin glass, roof, bumpers, spoiler, wheels and cockpit pieces.
+The default vehicle is now the free **Car Concept** model from the Khronos Group glTF Sample Assets repository. It includes a modeled exterior and real cabin/interior with dashboard, steering wheel, seats, glass, door interiors, wheels and mechanical detail.
+
+The asset is used under **CC BY 4.0** with attribution to Darmstadt Graphics Group GmbH and Eric Chadwick for the glTF conversion/optimization; the original Sketchfab model by Unity Fan was public domain (CC0).
+
+The game loads Khronos's compressed GLB build from jsDelivr so the detailed model does not need to be committed into this repository.
 
 Camera modes:
 - low third-person chase view
-- first-person view from the driver's seat with cockpit framing
+- first-person driver view placed inside the actual model cabin
 
 ## Physics
 
