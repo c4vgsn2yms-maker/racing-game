@@ -2,7 +2,7 @@
 
 const MPH_PER_MPS = 2.2369362921;
 const VEHICLE_BODY_HALF_HEIGHT = 0.69;
-const CAMERA_MODES = ['CHASE', 'HOOD', 'ORBIT'];
+const CAMERA_MODES = ['THIRD PERSON', 'FIRST PERSON'];
 const METERS_PER_DEGREE_LAT = 111320;
 
 const course = GravelRushCourse;
@@ -312,7 +312,7 @@ function initializeWorld() {
 
   updateWheelGround();
   updateCarEntity();
-  setCamera(true);
+  setCamera();
 }
 
 function resetCar() {
@@ -324,7 +324,7 @@ function resetCar() {
 
   if (carEntity) updateCarEntity();
   updateWheelGround();
-  setCamera(true);
+  setCamera();
   setWorldStatus('RESET TO START', 1.0);
 }
 
@@ -436,54 +436,117 @@ function updateCarEntity() {
   carEntity.orientation = vehicleOrientation(position);
 }
 
-function setCamera(immediate = false) {
+function offsetFromVehicle(forward, right) {
+  const c = Math.cos(vehicle.heading);
+  const s = Math.sin(vehicle.heading);
+
+  const north = c * forward - s * right;
+  const east = s * forward + c * right;
+
+  return {
+    x: worldPosition.x + east,
+    y: worldPosition.y + north
+  };
+}
+
+function aimCamera(cameraLocal, targetLocal) {
+  const cameraPosition = localToCartesian(cameraLocal.x, cameraLocal.y, cameraLocal.z);
+  const targetPosition = localToCartesian(targetLocal.x, targetLocal.y, targetLocal.z);
+
+  const direction = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.subtract(targetPosition, cameraPosition, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  const surfaceUp = Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+    cameraPosition,
+    new Cesium.Cartesian3()
+  );
+
+  let right = Cesium.Cartesian3.cross(direction, surfaceUp, new Cesium.Cartesian3());
+  if (Cesium.Cartesian3.magnitudeSquared(right) < 1e-8) {
+    right = Cesium.Cartesian3.clone(Cesium.Cartesian3.UNIT_X, right);
+  } else {
+    Cesium.Cartesian3.normalize(right, right);
+  }
+
+  const up = Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  viewer.camera.setView({
+    destination: cameraPosition,
+    orientation: { direction, up }
+  });
+}
+
+function setCamera() {
   if (!viewer || !vehicle) return;
 
   const mode = CAMERA_MODES[cameraModeIndex];
   ui.camera.textContent = mode;
-  const position = vehiclePosition();
-  const lookHeading = cameraLookX * Cesium.Math.toRadians(62);
-  const lookPitch = cameraLookY * Cesium.Math.toRadians(18);
 
-  if (mode === 'CHASE') {
-    const range = 16 + Math.min(vehicle.speed * 0.30, 17);
-    viewer.camera.lookAt(
-      position,
-      new Cesium.HeadingPitchRange(
-        vehicle.heading + Math.PI + lookHeading,
-        Cesium.Math.toRadians(-14) + lookPitch,
-        range
-      )
-    );
-  } else if (mode === 'HOOD') {
-    viewer.camera.lookAt(
-      position,
-      new Cesium.HeadingPitchRange(
-        vehicle.heading + Math.PI + lookHeading,
-        Cesium.Math.toRadians(-1) + lookPitch,
-        2.6
-      )
-    );
-  } else if (immediate) {
-    viewer.camera.lookAt(
-      position,
-      new Cesium.HeadingPitchRange(
-        vehicle.heading + Math.PI,
-        Cesium.Math.toRadians(-32),
-        55
-      )
-    );
+  if (carEntity) {
+    carEntity.show = mode !== 'FIRST PERSON';
   }
+
+  const carGround = vehicle.groundHeight;
+  const carCenter = vehicleAltitude();
+
+  if (mode === 'FIRST PERSON') {
+    const viewHeading = vehicle.heading + cameraLookX * Cesium.Math.toRadians(78);
+    const cameraOffset = offsetFromVehicle(0.70, 0);
+    const lookDistance = 34;
+    const targetX = cameraOffset.x + Math.sin(viewHeading) * lookDistance;
+    const targetY = cameraOffset.y + Math.cos(viewHeading) * lookDistance;
+
+    aimCamera(
+      {
+        x: cameraOffset.x,
+        y: cameraOffset.y,
+        z: carGround + 1.24
+      },
+      {
+        x: targetX,
+        y: targetY,
+        z: carGround + 1.24 - cameraLookY * 9
+      }
+    );
+    return;
+  }
+
+  // Low third-person chase camera. The camera stays only a few meters above
+  // the road and sits directly behind the vehicle instead of looking down from above.
+  const orbitHeading = vehicle.heading + cameraLookX * Cesium.Math.toRadians(68);
+  const chaseDistance = 6.8 + Math.min(vehicle.speed * 0.055, 2.7);
+  const chaseX = worldPosition.x - Math.sin(orbitHeading) * chaseDistance;
+  const chaseY = worldPosition.y - Math.cos(orbitHeading) * chaseDistance;
+
+  const targetForward = offsetFromVehicle(6.5, 0);
+
+  aimCamera(
+    {
+      x: chaseX,
+      y: chaseY,
+      z: carCenter + 2.0 + Math.min(vehicle.speed * 0.018, 0.8)
+    },
+    {
+      x: targetForward.x,
+      y: targetForward.y,
+      z: carCenter + 0.20 - cameraLookY * 4.5
+    }
+  );
 }
 
 function updateCamera() {
-  if (!viewer || CAMERA_MODES[cameraModeIndex] === 'ORBIT') return;
-  setCamera(false);
+  if (!viewer || !vehicle) return;
+  setCamera();
 }
 
 function changeCamera() {
   cameraModeIndex = (cameraModeIndex + 1) % CAMERA_MODES.length;
-  setCamera(true);
+  setCamera();
 }
 
 function updateHUD(dt) {
