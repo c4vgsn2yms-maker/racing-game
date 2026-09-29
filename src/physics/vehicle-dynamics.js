@@ -56,6 +56,9 @@ window.GravelRushPhysics = (() => {
       groundHeight: 0,
       bodyHeightOffset: config.rideHeight,
       impact: 0,
+      surfaceGrip: 1,
+      surfaceRolling: 1,
+      surfaceName: 'ASPHALT',
       wheels: {
         fl: makeWheel(config, 'fl', frontAxle * 0.5),
         fr: makeWheel(config, 'fr', frontAxle * 0.5),
@@ -299,7 +302,8 @@ window.GravelRushPhysics = (() => {
         longitudinalVelocity: wheelVx,
         lateralVelocity: wheelVy,
         steerAngle: steer,
-        longitudinalDemand
+        longitudinalDemand,
+        gripScale: state.surfaceGrip
       });
 
       wheel.lastSlipRatio = force.slipRatio;
@@ -334,7 +338,8 @@ window.GravelRushPhysics = (() => {
     sumFy += aero.fy;
 
     const speed = Math.hypot(state.vx, state.vy);
-    const rollingCoefficient = tireCfg.rollingResistance + tireCfg.rollingResistanceSpeed * speed * speed;
+    const rollingCoefficient = (tireCfg.rollingResistance + tireCfg.rollingResistanceSpeed * speed * speed) *
+      state.surfaceRolling;
     const rollingForce = rollingCoefficient * c.mass * M.G;
     state.telemetry.rollingResistance = rollingForce;
 
