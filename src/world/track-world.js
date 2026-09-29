@@ -264,31 +264,83 @@ function buildTrackVisuals() {
   });
 }
 
-function carModelOrientation(position) {
-  // Khronos CarConcept is authored Y-up with its longitudinal axis on Z.
-  // Cesium's model conversion plus this 180° heading offset aligns the car's
-  // visual nose with the game's forward direction.
-  return Cesium.Transforms.headingPitchRollQuaternion(
-    position,
-    new Cesium.HeadingPitchRoll(
-      vehicle.heading + Math.PI,
-      vehicle.pitch,
-      vehicle.roll
-    )
+function carAnchorPosition() {
+  // CarConcept's model origin is already close to wheel-ground height.
+  return localToCartesian(
+    worldPosition.x,
+    worldPosition.y,
+    vehicle.groundHeight + 0.04
   );
 }
 
+function carModelOrientation(position) {
+  // Cesium converts glTF's Y-up/Z-forward convention to Z-up/X-forward.
+  // Build the body frame explicitly: +X forward, +Y left, +Z up.
+  // This avoids relying on ambiguous heading-axis assumptions.
+  const ahead=offsetFromVehicle(1,0);
+  const rise=Math.tan(vehicle.pitch);
+  const aheadPosition=localToCartesian(
+    ahead.x,
+    ahead.y,
+    vehicle.groundHeight + 0.04 + rise
+  );
+
+  const forward=Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.subtract(aheadPosition,position,new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  const geodeticUp=Cesium.Ellipsoid.WGS84.geodeticSurfaceNormal(
+    position,
+    new Cesium.Cartesian3()
+  );
+
+  let left=Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(geodeticUp,forward,new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  let up=Cesium.Cartesian3.normalize(
+    Cesium.Cartesian3.cross(forward,left,new Cesium.Cartesian3()),
+    new Cesium.Cartesian3()
+  );
+
+  if(Math.abs(vehicle.roll)>1e-6) {
+    const cos=Math.cos(vehicle.roll);
+    const sin=Math.sin(vehicle.roll);
+    const rolledLeft=Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(left,cos,new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(up,sin,new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    const rolledUp=Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(up,cos,new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(left,-sin,new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    left=Cesium.Cartesian3.normalize(rolledLeft,rolledLeft);
+    up=Cesium.Cartesian3.normalize(rolledUp,rolledUp);
+  }
+
+  const rotation=new Cesium.Matrix3(
+    forward.x,left.x,up.x,
+    forward.y,left.y,up.y,
+    forward.z,left.z,up.z
+  );
+  return Cesium.Quaternion.fromRotationMatrix(rotation);
+}
+
 function buildCar() {
-  const position=vehiclePosition();
+  const position=carAnchorPosition();
   carModelEntity=viewer.entities.add({
-    name:'Khronos Car Concept',
+    name:'Car Concept — Khronos glTF Sample Assets',
     position,
     orientation:carModelOrientation(position),
     model:{
       uri:'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CarConcept/GLB/CarConcept.glb',
       scale:1.0,
-      minimumPixelSize:72,
-      maximumScale:2.0,
+      minimumPixelSize:64,
+      maximumScale:1.35,
       shadows:Cesium.ShadowMode.ENABLED
     }
   });
@@ -296,7 +348,7 @@ function buildCar() {
 
 function updateVisualParts() {
   if(!carModelEntity) return;
-  const position=vehiclePosition();
+  const position=carAnchorPosition();
   carModelEntity.position=position;
   carModelEntity.orientation=carModelOrientation(position);
 }
@@ -461,17 +513,17 @@ function setCamera() {
   const center=vehicleAltitude();
 
   if(first) {
-    // CarConcept has a centered driver's position. This eye point is derived
-    // from the model's published Interior camera preset and measured bounds.
-    const cam=offsetFromVehicle(.42,0);
-    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(58);
+    // Measured against CarConcept's real cabin. Its steering wheel sits near
+    // local Z +0.98 m and Y +0.62 m, so the eye is placed behind and above it.
+    const cam=offsetFromVehicle(.34,0);
+    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(54);
     const distance=30;
     aimCamera(
-      {x:cam.x,y:cam.y,z:ground+1.17},
+      {x:cam.x,y:cam.y,z:ground+1.01},
       {
         x:cam.x+Math.sin(heading)*distance,
         y:cam.y+Math.cos(heading)*distance,
-        z:ground+1.17+Math.tan(vehicle.pitch)*distance-cameraLookY*4.8
+        z:ground+1.01+Math.tan(vehicle.pitch)*distance-cameraLookY*4.4
       },
       vehicle.roll
     );
