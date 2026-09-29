@@ -555,7 +555,7 @@ function offsetFromVehicle(forward, right) {
   };
 }
 
-function aimCamera(cameraLocal, targetLocal) {
+function aimCamera(cameraLocal, targetLocal, cameraRoll = 0) {
   const cameraPosition = localToCartesian(cameraLocal.x, cameraLocal.y, cameraLocal.z);
   const targetPosition = localToCartesian(targetLocal.x, targetLocal.y, targetLocal.z);
 
@@ -576,10 +576,19 @@ function aimCamera(cameraLocal, targetLocal) {
     Cesium.Cartesian3.normalize(right, right);
   }
 
-  const up = Cesium.Cartesian3.normalize(
+  let up = Cesium.Cartesian3.normalize(
     Cesium.Cartesian3.cross(right, direction, new Cesium.Cartesian3()),
     new Cesium.Cartesian3()
   );
+
+  if (Math.abs(cameraRoll) > 1e-5) {
+    const rolledUp = Cesium.Cartesian3.add(
+      Cesium.Cartesian3.multiplyByScalar(up, Math.cos(cameraRoll), new Cesium.Cartesian3()),
+      Cesium.Cartesian3.multiplyByScalar(right, Math.sin(cameraRoll), new Cesium.Cartesian3()),
+      new Cesium.Cartesian3()
+    );
+    up = Cesium.Cartesian3.normalize(rolledUp, rolledUp);
+  }
 
   viewer.camera.setView({
     destination: cameraPosition,
@@ -614,6 +623,7 @@ function setCamera() {
     const lookDistance = 36;
     const targetX = cameraOffset.x + Math.sin(viewHeading) * lookDistance;
     const targetY = cameraOffset.y + Math.cos(viewHeading) * lookDistance;
+    const chassisPitchRise = Math.tan(vehicle.pitch) * lookDistance;
 
     aimCamera(
       {
@@ -624,8 +634,9 @@ function setCamera() {
       {
         x: targetX,
         y: targetY,
-        z: carGround + 1.20 - cameraLookY * 8.0
-      }
+        z: carGround + 1.20 + chassisPitchRise - cameraLookY * 8.0
+      },
+      vehicle.roll
     );
     return;
   }
