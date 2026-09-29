@@ -92,7 +92,7 @@ function color(hex, alpha = 1) {
   return Cesium.Color.fromCssColorString(hex).withAlpha(alpha);
 }
 
-function segmentQuad(a, b, width, raise = 0) {
+function makeSegmentGeometry(a, b, width, raise = 0) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const len = Math.hypot(dx, dy) || 1;
@@ -100,52 +100,130 @@ function segmentQuad(a, b, width, raise = 0) {
   const ny = dx / len;
   const half = width * 0.5;
 
-  const points = [
-    { x: a.x + nx * half, y: a.y + ny * half },
-    { x: b.x + nx * half, y: b.y + ny * half },
-    { x: b.x - nx * half, y: b.y - ny * half },
-    { x: a.x - nx * half, y: a.y - ny * half }
+  const local = [
+    [a.x + nx * half, a.y + ny * half],
+    [b.x + nx * half, b.y + ny * half],
+    [b.x - nx * half, b.y - ny * half],
+    [a.x - nx * half, a.y - ny * half]
   ];
 
-  return points.map(p => localToCartesian(
-    p.x,
-    p.y,
-    course.heightAt(p.x, p.y) + raise
-  ));
+  const cartesian = local.map(([x, y]) =>
+    localToCartesian(x, y, course.heightAt(x, y) + raise)
+  );
+
+  const positions = new Float64Array(12);
+  for (let i = 0; i < 4; i++) {
+    positions[i * 3] = cartesian[i].x;
+    positions[i * 3 + 1] = cartesian[i].y;
+    positions[i * 3 + 2] = cartesian[i].z;
+  }
+
+  return new Cesium.Geometry({
+    attributes: {
+      position: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+        componentsPerAttribute: 3,
+        values: positions
+      })
+    },
+    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+    primitiveType: Cesium.PrimitiveType.TRIANGLES,
+    boundingSphere: Cesium.BoundingSphere.fromPoints(cartesian)
+  });
+}
+
+function addMeshSegment(a, b, width, materialColor, raise = 0) {
+  const geometry = makeSegmentGeometry(a, b, width, raise);
+
+  viewer.scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry,
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(color(materialColor))
+      }
+    }),
+    appearance: new Cesium.PerInstanceColorAppearance({
+      flat: true,
+      translucent: false,
+      closed: false
+    }),
+    asynchronous: false
+  }));
+}
+
+function addGroundFloor() {
+  // A broad earth-colored floor prevents the course from floating in a black void.
+  // It intentionally sits below the lowest course point so all elevated sections remain visible.
+  const xs = course.samples.map(p => p.x);
+  const ys = course.samples.map(p => p.y);
+  const minX = Math.min(...xs) - 1300;
+  const maxX = Math.max(...xs) + 1300;
+  const minY = Math.min(...ys) - 1300;
+  const maxY = Math.max(...ys) + 1300;
+  const floorZ = Math.min(...course.samples.map(p => p.z)) - 18;
+
+  const floor = [
+    localToCartesian(minX, minY, floorZ),
+    localToCartesian(maxX, minY, floorZ),
+    localToCartesian(maxX, maxY, floorZ),
+    localToCartesian(minX, maxY, floorZ)
+  ];
+
+  const positions = new Float64Array(12);
+  for (let i = 0; i < 4; i++) {
+    positions[i * 3] = floor[i].x;
+    positions[i * 3 + 1] = floor[i].y;
+    positions[i * 3 + 2] = floor[i].z;
+  }
+
+  const geometry = new Cesium.Geometry({
+    attributes: {
+      position: new Cesium.GeometryAttribute({
+        componentDatatype: Cesium.ComponentDatatype.DOUBLE,
+        componentsPerAttribute: 3,
+        values: positions
+      })
+    },
+    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+    primitiveType: Cesium.PrimitiveType.TRIANGLES,
+    boundingSphere: Cesium.BoundingSphere.fromPoints(floor)
+  });
+
+  viewer.scene.primitives.add(new Cesium.Primitive({
+    geometryInstances: new Cesium.GeometryInstance({
+      geometry,
+      attributes: {
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(color('#6e6048'))
+      }
+    }),
+    appearance: new Cesium.PerInstanceColorAppearance({
+      flat: true,
+      translucent: false,
+      closed: false
+    }),
+    asynchronous: false
+  }));
 }
 
 function buildCourseVisuals() {
   const samples = course.samples;
+
+  addGroundFloor();
 
   for (let i = 0; i < samples.length; i++) {
     const a = samples[i];
     const b = samples[(i + 1) % samples.length];
     const surface = course.SURFACES[a.surfaceKey];
 
-    if (i % 2 === 0) {
-      viewer.entities.add({
-        polygon: {
-          hierarchy: new Cesium.PolygonHierarchy(segmentQuad(a, b, 170, -0.18)),
-          perPositionHeight: true,
-          material: color(surface.terrainColor, 1),
-          outline: false
-        }
-      });
-    }
-
-    viewer.entities.add({
-      polygon: {
-        hierarchy: new Cesium.PolygonHierarchy(segmentQuad(a, b, surface.width, 0.05)),
-        perPositionHeight: true,
-        material: color(surface.color, 1),
-        outline: false
-      }
-    });
+    // Narrow shoulder mesh around each road segment. Using explicit triangles
+    // avoids Cesium polygon triangulation creating giant cross-course wedges.
+    addMeshSegment(a, b, surface.width + 12, surface.terrainColor, 0.015);
+    addMeshSegment(a, b, surface.width, surface.color, 0.055);
 
     if ((a.surfaceKey === 'ASPHALT' || a.surfaceKey === 'MOUNTAIN') && i % 2 === 0) {
       const positions = [
-        localToCartesian(a.x, a.y, course.heightAt(a.x, a.y) + 0.11),
-        localToCartesian(b.x, b.y, course.heightAt(b.x, b.y) + 0.11)
+        localToCartesian(a.x, a.y, course.heightAt(a.x, a.y) + 0.105),
+        localToCartesian(b.x, b.y, course.heightAt(b.x, b.y) + 0.105)
       ];
 
       viewer.entities.add({
@@ -290,10 +368,14 @@ function initializeWorld() {
     requestRenderMode: false
   });
 
-  viewer.scene.globe.show = false;
-  viewer.scene.skyAtmosphere.show = false;
-  viewer.scene.backgroundColor = color('#7b9ab0');
-  viewer.scene.fog.enabled = false;
+  viewer.scene.globe.show = true;
+  viewer.scene.globe.baseColor = color('#6e6048');
+  viewer.scene.globe.enableLighting = false;
+  viewer.scene.skyAtmosphere.show = true;
+  viewer.scene.backgroundColor = color('#86a9bd');
+  viewer.scene.fog.enabled = true;
+  viewer.scene.fog.density = 0.00018;
+  viewer.scene.fog.minimumBrightness = 0.22;
 
   vehicle = createVehicleState();
   buildCourseVisuals();
