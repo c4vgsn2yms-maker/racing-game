@@ -44,8 +44,6 @@ let cameraLookX = 0;
 let cameraLookY = 0;
 let lastControllerInput = null;
 let carModelEntity = null;
-let carFallbackEntity = null;
-let cockpitParts = [];
 let worldPosition = { x:0, y:0 };
 
 function color(hex, alpha=1) {
@@ -74,8 +72,6 @@ function renderTrackMenu() {
 function destroyWorld() {
   running = false;
   carModelEntity = null;
-  carFallbackEntity = null;
-  cockpitParts = [];
   vehicle = null;
   course = null;
   spawn = null;
@@ -268,87 +264,41 @@ function buildTrackVisuals() {
   });
 }
 
+function carModelOrientation(position) {
+  // Khronos CarConcept is authored Y-up with its longitudinal axis on Z.
+  // Cesium's model conversion plus this 180° heading offset aligns the car's
+  // visual nose with the game's forward direction.
+  return Cesium.Transforms.headingPitchRollQuaternion(
+    position,
+    new Cesium.HeadingPitchRoll(
+      vehicle.heading + Math.PI,
+      vehicle.pitch,
+      vehicle.roll
+    )
+  );
+}
+
 function buildCar() {
   const position=vehiclePosition();
   carModelEntity=viewer.entities.add({
-    name:'GRX Rally Coupe',
+    name:'Khronos Car Concept',
     position,
-    orientation:vehicleOrientation(position),
+    orientation:carModelOrientation(position),
     model:{
-      uri:'assets/grx-rally.gltf?v=grx-axis-2',
-      scale:1,
-      minimumPixelSize:96,
-      maximumScale:4,
-      silhouetteColor:color('#111318'),
-      silhouetteSize:1.0,
+      uri:'https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Assets@main/Models/CarConcept/GLB/CarConcept.glb',
+      scale:1.0,
+      minimumPixelSize:72,
+      maximumScale:2.0,
       shadows:Cesium.ShadowMode.ENABLED
     }
   });
-
-  const fallbackPoint=offsetFromVehicle(0,0);
-  const fallbackPosition=localToCartesian(
-    fallbackPoint.x,
-    fallbackPoint.y,
-    vehicle.groundHeight+.48
-  );
-  carFallbackEntity=viewer.entities.add({
-    name:'GRX fallback chassis',
-    position:fallbackPosition,
-    orientation:vehicleOrientation(fallbackPosition),
-    box:{
-      dimensions:new Cesium.Cartesian3(1.82,4.02,.34),
-      material:color('#c77b19'),
-      outline:true,
-      outlineColor:color('#111318')
-    }
-  });
-
-  cockpitParts=[];
-  const dark='#181a1d';
-  const addCockpitBox=(name,forward,right,height,dimensions,material)=>{
-    const p=offsetFromVehicle(forward,right);
-    const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+height);
-    const entity=viewer.entities.add({
-      name,
-      position:pos,
-      orientation:vehicleOrientation(pos),
-      show:false,
-      box:{
-        dimensions:new Cesium.Cartesian3(...dimensions),
-        material:color(material),
-        outline:false
-      }
-    });
-    cockpitParts.push({entity,forward,right,height});
-  };
-
-  addCockpitBox('Dashboard',.80,0,.88,[1.70,.32,.24],dark);
-  addCockpitBox('Steering wheel',.44,-.38,1.04,[.42,.08,.42],'#090a0b');
-  addCockpitBox('Left pillar',.93,-.80,1.28,[.10,.12,.62],dark);
-  addCockpitBox('Right pillar',.93,.80,1.28,[.10,.12,.62],dark);
-  addCockpitBox('Header',.92,0,1.55,[1.66,.12,.11],dark);
 }
 
 function updateVisualParts() {
-  if(carModelEntity) {
-    const position=vehiclePosition();
-    carModelEntity.position=position;
-    carModelEntity.orientation=vehicleOrientation(position);
-  }
-
-  if(carFallbackEntity) {
-    const p=offsetFromVehicle(0,0);
-    const position=localToCartesian(p.x,p.y,vehicle.groundHeight+.48);
-    carFallbackEntity.position=position;
-    carFallbackEntity.orientation=vehicleOrientation(position);
-  }
-
-  for(const part of cockpitParts) {
-    const p=offsetFromVehicle(part.forward,part.right);
-    const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+part.height);
-    part.entity.position=pos;
-    part.entity.orientation=vehicleOrientation(pos);
-  }
+  if(!carModelEntity) return;
+  const position=vehiclePosition();
+  carModelEntity.position=position;
+  carModelEntity.orientation=carModelOrientation(position);
 }
 
 function createVehicleState() {
@@ -502,24 +452,26 @@ function setCamera() {
   if(!viewer||!vehicle) return;
   const first=CAMERA_MODES[cameraModeIndex]==='FIRST PERSON';
   ui.camera.textContent=first?'VIEW: DRIVER':'VIEW: CHASE';
-  if(carModelEntity) carModelEntity.show=!first;
-  if(carFallbackEntity) carFallbackEntity.show=!first;
-  for(const p of cockpitParts) p.entity.show=first;
+
+  // Keep the real model visible in both views. Driver view is physically
+  // inside the modeled cabin, so the dashboard/glass/interior remain visible.
+  if(carModelEntity) carModelEntity.show=true;
 
   const ground=vehicle.groundHeight;
   const center=vehicleAltitude();
 
   if(first) {
-    // Driver eye position inside the left-hand seat, behind the dashboard.
-    const cam=offsetFromVehicle(-.12,-.38);
-    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(62);
-    const distance=32;
+    // CarConcept has a centered driver's position. This eye point is derived
+    // from the model's published Interior camera preset and measured bounds.
+    const cam=offsetFromVehicle(.42,0);
+    const heading=vehicle.heading+cameraLookX*Cesium.Math.toRadians(58);
+    const distance=30;
     aimCamera(
-      {x:cam.x,y:cam.y,z:ground+1.23},
+      {x:cam.x,y:cam.y,z:ground+1.17},
       {
         x:cam.x+Math.sin(heading)*distance,
         y:cam.y+Math.cos(heading)*distance,
-        z:ground+1.23+Math.tan(vehicle.pitch)*distance-cameraLookY*5.2
+        z:ground+1.17+Math.tan(vehicle.pitch)*distance-cameraLookY*4.8
       },
       vehicle.roll
     );
