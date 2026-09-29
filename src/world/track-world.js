@@ -43,7 +43,7 @@ let cameraModeIndex = 0;
 let cameraLookX = 0;
 let cameraLookY = 0;
 let lastControllerInput = null;
-let carParts = [];
+let carModelEntity = null;
 let cockpitParts = [];
 let worldPosition = { x:0, y:0 };
 
@@ -72,7 +72,7 @@ function renderTrackMenu() {
 
 function destroyWorld() {
   running = false;
-  carParts = [];
+  carModelEntity = null;
   cockpitParts = [];
   vehicle = null;
   course = null;
@@ -266,59 +266,57 @@ function buildTrackVisuals() {
   });
 }
 
-function addCarBox(name,forward,right,height,dimensions,material,cockpit=false) {
-  const p=offsetFromVehicle(forward,right);
-  const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+height);
-  const entity=viewer.entities.add({
-    name,
-    position:pos,
-    orientation:vehicleOrientation(pos),
-    show:!cockpit,
-    box:{
-      dimensions:new Cesium.Cartesian3(...dimensions),
-      material:color(material),
-      outline:false
-    }
-  });
-  (cockpit?cockpitParts:carParts).push({entity,forward,right,height});
-}
-
-function addWheel(forward,right) {
-  const p=offsetFromVehicle(forward,right);
-  const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+.38);
-  const entity=viewer.entities.add({
-    position:pos,
-    orientation:vehicleOrientation(pos),
-    ellipsoid:{
-      radii:new Cesium.Cartesian3(.21,.37,.37),
-      material:color('#111214')
-    }
-  });
-  carParts.push({entity,forward,right,height:.38});
-}
-
 function buildCar() {
-  carParts=[]; cockpitParts=[];
-  const body='#e39b28', dark='#181a1d', glass='#26353e';
+  const position=vehiclePosition();
+  carModelEntity=viewer.entities.add({
+    name:'GRX Rally Coupe',
+    position,
+    orientation:vehicleOrientation(position),
+    model:{
+      uri:'assets/grx-rally.gltf?v=grx-model-1',
+      scale:1,
+      minimumPixelSize:96,
+      maximumScale:4,
+      silhouetteColor:color('#111318'),
+      silhouetteSize:1.0,
+      shadows:Cesium.ShadowMode.ENABLED
+    }
+  });
 
-  addCarBox('GRX body',0,0,.53,[1.88,4.18,.50],body);
-  addCarBox('GRX hood',1.27,0,.80,[1.72,1.30,.24],'#c77b19');
-  addCarBox('GRX glass',-.20,0,1.08,[1.54,1.70,.48],glass);
-  addCarBox('GRX roof',-.28,0,1.40,[1.46,1.28,.13],body);
-  addCarBox('GRX spoiler',-1.82,0,1.34,[1.68,.18,.12],dark);
-  addCarBox('GRX front',2.08,0,.43,[1.90,.25,.22],dark);
-  addCarBox('GRX rear',-2.08,0,.43,[1.90,.25,.22],dark);
-  for(const f of [-1.32,1.32]) { addWheel(f,-.96); addWheel(f,.96); }
+  cockpitParts=[];
+  const dark='#181a1d';
+  const addCockpitBox=(name,forward,right,height,dimensions,material)=>{
+    const p=offsetFromVehicle(forward,right);
+    const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+height);
+    const entity=viewer.entities.add({
+      name,
+      position:pos,
+      orientation:vehicleOrientation(pos),
+      show:false,
+      box:{
+        dimensions:new Cesium.Cartesian3(...dimensions),
+        material:color(material),
+        outline:false
+      }
+    });
+    cockpitParts.push({entity,forward,right,height});
+  };
 
-  addCarBox('Dashboard',.80,0,.88,[1.70,.32,.24],dark,true);
-  addCarBox('Steering wheel',.44,-.38,1.04,[.42,.08,.42],'#090a0b',true);
-  addCarBox('Left pillar',.93,-.80,1.28,[.10,.12,.62],dark,true);
-  addCarBox('Right pillar',.93,.80,1.28,[.10,.12,.62],dark,true);
-  addCarBox('Header',.92,0,1.55,[1.66,.12,.11],dark,true);
+  addCockpitBox('Dashboard',.80,0,.88,[1.70,.32,.24],dark);
+  addCockpitBox('Steering wheel',.44,-.38,1.04,[.42,.08,.42],'#090a0b');
+  addCockpitBox('Left pillar',.93,-.80,1.28,[.10,.12,.62],dark);
+  addCockpitBox('Right pillar',.93,.80,1.28,[.10,.12,.62],dark);
+  addCockpitBox('Header',.92,0,1.55,[1.66,.12,.11],dark);
 }
 
 function updateVisualParts() {
-  for(const part of [...carParts,...cockpitParts]) {
+  if(carModelEntity) {
+    const position=vehiclePosition();
+    carModelEntity.position=position;
+    carModelEntity.orientation=vehicleOrientation(position);
+  }
+
+  for(const part of cockpitParts) {
     const p=offsetFromVehicle(part.forward,part.right);
     const pos=localToCartesian(p.x,p.y,vehicle.groundHeight+part.height);
     part.entity.position=pos;
@@ -477,7 +475,7 @@ function setCamera() {
   if(!viewer||!vehicle) return;
   const first=CAMERA_MODES[cameraModeIndex]==='FIRST PERSON';
   ui.camera.textContent=CAMERA_MODES[cameraModeIndex];
-  for(const p of carParts) p.entity.show=!first;
+  if(carModelEntity) carModelEntity.show=!first;
   for(const p of cockpitParts) p.entity.show=first;
 
   const ground=vehicle.groundHeight;
