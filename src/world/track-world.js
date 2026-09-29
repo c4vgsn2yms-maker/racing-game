@@ -44,6 +44,7 @@ let cameraLookX = 0;
 let cameraLookY = 0;
 let lastControllerInput = null;
 let carModelEntity = null;
+let carFallbackEntity = null;
 let cockpitParts = [];
 let worldPosition = { x:0, y:0 };
 
@@ -73,6 +74,7 @@ function renderTrackMenu() {
 function destroyWorld() {
   running = false;
   carModelEntity = null;
+  carFallbackEntity = null;
   cockpitParts = [];
   vehicle = null;
   course = null;
@@ -283,6 +285,24 @@ function buildCar() {
     }
   });
 
+  const fallbackPoint=offsetFromVehicle(0,0);
+  const fallbackPosition=localToCartesian(
+    fallbackPoint.x,
+    fallbackPoint.y,
+    vehicle.groundHeight+.48
+  );
+  carFallbackEntity=viewer.entities.add({
+    name:'GRX fallback chassis',
+    position:fallbackPosition,
+    orientation:vehicleOrientation(fallbackPosition),
+    box:{
+      dimensions:new Cesium.Cartesian3(1.82,4.02,.34),
+      material:color('#c77b19'),
+      outline:true,
+      outlineColor:color('#111318')
+    }
+  });
+
   cockpitParts=[];
   const dark='#181a1d';
   const addCockpitBox=(name,forward,right,height,dimensions,material)=>{
@@ -314,6 +334,13 @@ function updateVisualParts() {
     const position=vehiclePosition();
     carModelEntity.position=position;
     carModelEntity.orientation=vehicleOrientation(position);
+  }
+
+  if(carFallbackEntity) {
+    const p=offsetFromVehicle(0,0);
+    const position=localToCartesian(p.x,p.y,vehicle.groundHeight+.48);
+    carFallbackEntity.position=position;
+    carFallbackEntity.orientation=vehicleOrientation(position);
   }
 
   for(const part of cockpitParts) {
@@ -476,6 +503,7 @@ function setCamera() {
   const first=CAMERA_MODES[cameraModeIndex]==='FIRST PERSON';
   ui.camera.textContent=CAMERA_MODES[cameraModeIndex];
   if(carModelEntity) carModelEntity.show=!first;
+  if(carFallbackEntity) carFallbackEntity.show=!first;
   for(const p of cockpitParts) p.entity.show=first;
 
   const ground=vehicle.groundHeight;
