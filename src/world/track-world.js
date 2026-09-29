@@ -412,6 +412,10 @@ function initializeWorld() {
   viewer.scene.fog.minimumBrightness = 0.22;
 
   vehicle = createVehicleState();
+
+if (new URLSearchParams(window.location.search).get('autostart') === '1') {
+  setTimeout(() => ui.startButton.click(), 0);
+}
   buildCourseVisuals();
 
   buildCarModel();
