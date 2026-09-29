@@ -3,10 +3,10 @@
 window.GravelRushTires = (() => {
   const { clamp } = window.GravelRushMath;
 
-  function frictionCoefficient(config, normalLoad) {
+  function frictionCoefficient(config, normalLoad, gripScale = 1) {
     const ratio = normalLoad / Math.max(config.nominalLoad, 1);
     const sensitivity = 1 - config.loadSensitivity * (ratio - 1);
-    return config.muDry * clamp(sensitivity, 0.78, 1.16);
+    return config.muDry * gripScale * clamp(sensitivity, 0.78, 1.16);
   }
 
   function combinedTireForce({
@@ -15,7 +15,8 @@ window.GravelRushTires = (() => {
     longitudinalVelocity,
     lateralVelocity,
     steerAngle,
-    longitudinalDemand
+    longitudinalDemand,
+    gripScale = 1
   }) {
     if (normalLoad <= 1) {
       return {
@@ -39,7 +40,7 @@ window.GravelRushTires = (() => {
     const vy = -s * longitudinalVelocity + c * lateralVelocity;
     const slipAngle = clamp(Math.atan2(vy, Math.max(Math.abs(vx), 1.2)), -1.2, 1.2);
 
-    const mu = frictionCoefficient(config, normalLoad);
+    const mu = frictionCoefficient(config, normalLoad, gripScale);
     const frictionLimit = Math.max(mu * normalLoad, 1);
 
     // Lateral brush response. The hyperbolic tangent gives a progressive breakaway
