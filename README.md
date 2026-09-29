@@ -25,7 +25,9 @@ The default game no longer requires Google Maps or an API key. The world is gene
 - section markers and start/finish structure
 - no map API key required
 - low third-person chase camera
-- true first-person driver/hood-height camera
+- true first-person cockpit camera from the driver's seat
+- visible dashboard, steering-wheel position, windshield pillars and cabin framing
+- first-person view follows chassis pitch and body roll
 - camera cycle contains only first-person and third-person driving views
 
 ## Vehicle physics
