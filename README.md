@@ -30,6 +30,12 @@ The default game no longer requires Google Maps or an API key. The world is gene
 - first-person view follows chassis pitch and body roll
 - camera cycle contains only first-person and third-person driving views
 
+## Vehicle model
+
+The default third-person vehicle is now the custom **GRX Rally Coupe**, built directly in the game from independent 3D body panels, cabin glass, bumpers, side skirts, spoiler, headlights, taillights, tires and rims. First-person retains the separate driver-seat cockpit view.
+
+The course renderer now uses a shared-vertex continuous terrain ribbon beneath the road rather than disconnected segment patches, reducing gaps and floating wedges on curves and elevation changes.
+
 ## Vehicle physics
 
 - Four-wheel longitudinal/lateral/yaw vehicle dynamics
