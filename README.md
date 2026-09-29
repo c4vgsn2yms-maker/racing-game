@@ -24,6 +24,9 @@ The default game no longer requires Google Maps or an API key. The world is gene
 - off-track shoulders and rough terrain
 - section markers and start/finish structure
 - no map API key required
+- low third-person chase camera
+- true first-person driver/hood-height camera
+- camera cycle contains only first-person and third-person driving views
 
 ## Vehicle physics
 
@@ -57,7 +60,7 @@ See `docs/PHYSICS_MODEL.md` for the modeling details and limitations.
 - RT / R2 — analog throttle
 - LT / L2 — analog brake / reverse
 - A / Cross — handbrake
-- Y / Triangle — cycle camera
+- Y / Triangle — switch first-person / third-person
 - B / Circle — reset vehicle
 - Right stick — camera look
 - Feature-detected vibration feedback for tire slip and heavy loading
@@ -70,7 +73,7 @@ The game prefers the browser's standard Gamepad API mapping, so common Xbox- and
 - S / Down Arrow — brake / reverse
 - A/D or Left/Right — steer
 - Space — handbrake
-- C — camera
+- C — switch first-person / third-person
 - R — reset
 
 ## Touch
