@@ -1,110 +1,70 @@
-# Gravel Rush — Multi-Terrain Endurance
+# Gravel Rush
 
-Gravel Rush is a browser-based 3D driving prototype built around realistic vehicle dynamics and a purpose-built endurance course.
+Gravel Rush is a browser-based 3D driving prototype with realistic vehicle dynamics, first/third-person cameras, controller support, and a custom GRX Rally Coupe.
 
-The default game no longer requires Google Maps or an API key. The world is generated directly by the game and is designed specifically to exercise the vehicle physics across very different surfaces and elevations.
+## Selectable track architecture
 
-## Current 3D build
+The old single ~38 km mixed-terrain world has been retired from the default game. The browser now loads **one compact track at a time**. Changing tracks destroys the current Cesium scene before building the next one, reducing geometry count and memory pressure on phones.
 
-- ~38.3 km continuous endurance loop
-- 10 distinct terrain/surface sections:
-  - high-speed asphalt
-  - gravel
-  - loose dirt
-  - mud
-  - deep sand
-  - rocky trail
-  - packed snow
-  - ice
-  - mountain tarmac
-  - rough rally terrain
-- major climbs and descents
-- banked mountain sections
-- rough suspension-test terrain and ramp/jump-shaped features
-- off-track shoulders and rough terrain
-- section markers and start/finish structure
-- no map API key required
-- low third-person chase camera
-- true first-person cockpit camera from the driver's seat
-- visible dashboard, steering-wheel position, windshield pillars and cabin framing
-- first-person view follows chassis pitch and body roll
-- camera cycle contains only first-person and third-person driving views
+Current tracks:
 
-## Vehicle model
+- **Redline Circuit** — 7.42 km — asphalt
+- **Dust Devil Rally** — 6.85 km — gravel + loose dirt
+- **Dune Runner** — 7.81 km — sand + dirt
+- **Frostbite Loop** — 5.97 km — packed snow + ice
+- **Quarry Run** — 5.23 km — rock + gravel
+- **Bogline** — 5.97 km — mud + dirt
 
-The default third-person vehicle is now the custom **GRX Rally Coupe**, built directly in the game from independent 3D body panels, cabin glass, bumpers, side skirts, spoiler, headlights, taillights, tires and rims. First-person retains the separate driver-seat cockpit view.
+Each course uses only 88–96 spline samples and one or two surface materials.
 
-The course renderer now uses a shared-vertex continuous terrain ribbon beneath the road rather than disconnected segment patches, reducing gaps and floating wedges on curves and elevation changes.
+## Vehicle
 
-## Vehicle physics
+The default vehicle is the custom **GRX Rally Coupe**, assembled directly in the game from body, hood, cabin glass, roof, bumpers, spoiler, wheels and cockpit pieces.
 
-- Four-wheel longitudinal/lateral/yaw vehicle dynamics
-- Per-wheel combined tire forces
-- Surface-dependent tire friction
-- Surface-dependent rolling resistance
-- Tire load sensitivity
-- Longitudinal and lateral load transfer
-- Spring/damper suspension
-- Suspension travel and bump stops
-- Anti-roll stiffness distribution
-- Road grade and banking
-- Aerodynamic drag, mild downforce and side drag
-- RPM/torque-curve engine model
+Camera modes:
+- low third-person chase view
+- first-person view from the driver's seat with cockpit framing
+
+## Physics
+
+- per-wheel combined tire forces
+- surface-dependent friction and rolling resistance
+- load sensitivity
+- longitudinal/lateral load transfer
+- spring/damper suspension
+- anti-roll stiffness distribution
+- road grade and banking
+- engine torque curve and RPM
 - 6-speed automatic transmission
-- final drive and driveline efficiency
-- AWD center/axle limited-slip behavior
+- AWD torque distribution
 - ABS and traction control
-- handbrake
-- fixed physics substeps around 120 Hz
+- aerodynamic drag/downforce
+- fixed physics substeps near 120 Hz
 
-The current baseline vehicle is a fictional 1520 kg AWD rally car rather than a direct copy of a production model.
+## Controls
 
-See `docs/PHYSICS_MODEL.md` for the modeling details and limitations.
-
-## Controller support
-
-**Gamepad / controller**
-- Left stick or D-pad — steer
-- RT / R2 — analog throttle
-- LT / L2 — analog brake / reverse
+Gamepad:
+- Left stick / D-pad — steer
+- RT / R2 — throttle
+- LT / L2 — brake / reverse
 - A / Cross — handbrake
-- Y / Triangle — switch first-person / third-person
-- B / Circle — reset vehicle
-- Right stick — camera look
-- Feature-detected vibration feedback for tire slip and heavy loading
+- Y / Triangle — first/third person
+- B / Circle — reset
+- Right stick — look
 
-The game prefers the browser's standard Gamepad API mapping, so common Xbox- and PlayStation-style controllers should work without a custom profile.
-
-## Keyboard
-
-- W / Up Arrow — throttle
-- S / Down Arrow — brake / reverse
+Keyboard:
+- W / Up — throttle
+- S / Down — brake / reverse
 - A/D or Left/Right — steer
 - Space — handbrake
-- C — switch first-person / third-person
+- C — camera
 - R — reset
+- T — return to track selection
 
-## Touch
-
-On-screen steering, throttle, brake and handbrake controls are available on touch devices.
+Touch controls remain available on phones.
 
 ## Testing
 
-Run the dependency-free regression suite with:
+`npm test` runs physics, controller and selectable-track regression tests.
 
-```bash
-npm test
-```
-
-The suite checks vehicle dynamics, controller mappings and the generated course/surface behavior.
-
-## Legacy builds
-
-- `legacy.html` preserves the original 2D handling prototype.
-- `src/phoenix.js` and `docs/GOOGLE_MAPS_SETUP.md` preserve the earlier Google Photorealistic 3D Tiles experiment for reference, but they are no longer part of the default game.
-
-## Development direction
-
-The next fidelity steps are proper 6-DOF airborne vehicle motion, improved terrain meshes, surface-specific particles/tracks, collision geometry, damage, more vehicles, AI opponents and event/race systems.
-
-See `docs/ROADMAP.md` for the development path.
+The track test checks all six tracks independently for finite geometry, valid surface physics, compact sample counts, off-track behavior, and the one/two-terrain limit.
