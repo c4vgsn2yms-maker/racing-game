@@ -35,7 +35,7 @@ const keys = new Set();
 const touch = new Set();
 
 let viewer = null;
-let carEntity = null;
+let carEntities = [];
 let cockpitEntities = [];
 let running = false;
 let cameraModeIndex = 0;
@@ -92,33 +92,55 @@ function color(hex, alpha = 1) {
   return Cesium.Color.fromCssColorString(hex).withAlpha(alpha);
 }
 
-function makeSegmentGeometry(a, b, width, raise = 0) {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len;
-  const ny = dx / len;
-  const half = width * 0.5;
+function stripVertex(sample, halfWidth, side, raise = 0) {
+  const nx = -sample.ty;
+  const ny = sample.tx;
+  const x = sample.x + nx * halfWidth * side;
+  const y = sample.y + ny * halfWidth * side;
+  return localToCartesian(x, y, course.heightAt(x, y) + raise);
+}
 
-  const local = [
-    [a.x + nx * half, a.y + ny * half],
-    [b.x + nx * half, b.y + ny * half],
-    [b.x - nx * half, b.y - ny * half],
-    [a.x - nx * half, a.y - ny * half]
-  ];
+function buildContinuousStrip(widthForSample, materialColor, raise = 0) {
+  const samples = course.samples;
+  const points = [];
+  const positions = new Float64Array(samples.length * 2 * 3);
+  const indices = new Uint16Array(samples.length * 6);
 
-  const cartesian = local.map(([x, y]) =>
-    localToCartesian(x, y, course.heightAt(x, y) + raise)
-  );
+  for (let i = 0; i < samples.length; i++) {
+    const width = typeof widthForSample === 'function'
+      ? widthForSample(samples[i], i)
+      : widthForSample;
+    const half = width * 0.5;
+    const left = stripVertex(samples[i], half, 1, raise);
+    const right = stripVertex(samples[i], half, -1, raise);
+    points.push(left, right);
 
-  const positions = new Float64Array(12);
-  for (let i = 0; i < 4; i++) {
-    positions[i * 3] = cartesian[i].x;
-    positions[i * 3 + 1] = cartesian[i].y;
-    positions[i * 3 + 2] = cartesian[i].z;
+    const base = i * 6;
+    positions[base] = left.x;
+    positions[base + 1] = left.y;
+    positions[base + 2] = left.z;
+    positions[base + 3] = right.x;
+    positions[base + 4] = right.y;
+    positions[base + 5] = right.z;
   }
 
-  return new Cesium.Geometry({
+  for (let i = 0; i < samples.length; i++) {
+    const next = (i + 1) % samples.length;
+    const aL = i * 2;
+    const aR = aL + 1;
+    const bL = next * 2;
+    const bR = bL + 1;
+    const base = i * 6;
+
+    indices[base] = aL;
+    indices[base + 1] = bL;
+    indices[base + 2] = bR;
+    indices[base + 3] = aL;
+    indices[base + 4] = bR;
+    indices[base + 5] = aR;
+  }
+
+  const geometry = new Cesium.Geometry({
     attributes: {
       position: new Cesium.GeometryAttribute({
         componentDatatype: Cesium.ComponentDatatype.DOUBLE,
@@ -126,14 +148,10 @@ function makeSegmentGeometry(a, b, width, raise = 0) {
         values: positions
       })
     },
-    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+    indices,
     primitiveType: Cesium.PrimitiveType.TRIANGLES,
-    boundingSphere: Cesium.BoundingSphere.fromPoints(cartesian)
+    boundingSphere: Cesium.BoundingSphere.fromPoints(points)
   });
-}
-
-function addMeshSegment(a, b, width, materialColor, raise = 0) {
-  const geometry = makeSegmentGeometry(a, b, width, raise);
 
   viewer.scene.primitives.add(new Cesium.Primitive({
     geometryInstances: new Cesium.GeometryInstance({
@@ -151,49 +169,62 @@ function addMeshSegment(a, b, width, materialColor, raise = 0) {
   }));
 }
 
-function addGroundFloor() {
-  // A broad earth-colored floor prevents the course from floating in a black void.
-  // It intentionally sits below the lowest course point so all elevated sections remain visible.
-  const xs = course.samples.map(p => p.x);
-  const ys = course.samples.map(p => p.y);
-  const minX = Math.min(...xs) - 1300;
-  const maxX = Math.max(...xs) + 1300;
-  const minY = Math.min(...ys) - 1300;
-  const maxY = Math.max(...ys) + 1300;
-  const floorZ = Math.min(...course.samples.map(p => p.z)) - 18;
+function buildRoadSurface(surfaceKey) {
+  const samples = course.samples;
+  const positions = [];
+  const indices = [];
+  const points = [];
+  let vertexBase = 0;
 
-  const floor = [
-    localToCartesian(minX, minY, floorZ),
-    localToCartesian(maxX, minY, floorZ),
-    localToCartesian(maxX, maxY, floorZ),
-    localToCartesian(minX, maxY, floorZ)
-  ];
+  for (let i = 0; i < samples.length; i++) {
+    const a = samples[i];
+    if (a.surfaceKey !== surfaceKey) continue;
 
-  const positions = new Float64Array(12);
-  for (let i = 0; i < 4; i++) {
-    positions[i * 3] = floor[i].x;
-    positions[i * 3 + 1] = floor[i].y;
-    positions[i * 3 + 2] = floor[i].z;
+    const nextIndex = (i + 1) % samples.length;
+    const b = samples[nextIndex];
+    const aSurface = course.SURFACES[a.surfaceKey];
+    const bSurface = course.SURFACES[b.surfaceKey];
+
+    const aLeft = stripVertex(a, aSurface.width * 0.5, 1, 0.075);
+    const aRight = stripVertex(a, aSurface.width * 0.5, -1, 0.075);
+    const bLeft = stripVertex(b, bSurface.width * 0.5, 1, 0.075);
+    const bRight = stripVertex(b, bSurface.width * 0.5, -1, 0.075);
+
+    const quad = [aLeft, bLeft, bRight, aRight];
+    for (const p of quad) {
+      positions.push(p.x, p.y, p.z);
+      points.push(p);
+    }
+
+    indices.push(
+      vertexBase, vertexBase + 1, vertexBase + 2,
+      vertexBase, vertexBase + 2, vertexBase + 3
+    );
+    vertexBase += 4;
   }
+
+  if (!positions.length) return;
 
   const geometry = new Cesium.Geometry({
     attributes: {
       position: new Cesium.GeometryAttribute({
         componentDatatype: Cesium.ComponentDatatype.DOUBLE,
         componentsPerAttribute: 3,
-        values: positions
+        values: new Float64Array(positions)
       })
     },
-    indices: new Uint16Array([0, 1, 2, 0, 2, 3]),
+    indices: new Uint16Array(indices),
     primitiveType: Cesium.PrimitiveType.TRIANGLES,
-    boundingSphere: Cesium.BoundingSphere.fromPoints(floor)
+    boundingSphere: Cesium.BoundingSphere.fromPoints(points)
   });
 
   viewer.scene.primitives.add(new Cesium.Primitive({
     geometryInstances: new Cesium.GeometryInstance({
       geometry,
       attributes: {
-        color: Cesium.ColorGeometryInstanceAttribute.fromColor(color('#6e6048'))
+        color: Cesium.ColorGeometryInstanceAttribute.fromColor(
+          color(course.SURFACES[surfaceKey].color)
+        )
       }
     }),
     appearance: new Cesium.PerInstanceColorAppearance({
@@ -208,27 +239,30 @@ function addGroundFloor() {
 function buildCourseVisuals() {
   const samples = course.samples;
 
-  addGroundFloor();
+  // One shared-vertex terrain ribbon for the whole loop eliminates seams and
+  // floating wedges between individual road segments.
+  buildContinuousStrip(720, '#6e6048', -0.28);
+  buildContinuousStrip(
+    sample => course.SURFACES[sample.surfaceKey].width + 18,
+    '#786a52',
+    0.015
+  );
+
+  for (const surfaceKey of Object.keys(course.SURFACES)) {
+    buildRoadSurface(surfaceKey);
+  }
 
   for (let i = 0; i < samples.length; i++) {
     const a = samples[i];
     const b = samples[(i + 1) % samples.length];
-    const surface = course.SURFACES[a.surfaceKey];
-
-    // Narrow shoulder mesh around each road segment. Using explicit triangles
-    // avoids Cesium polygon triangulation creating giant cross-course wedges.
-    addMeshSegment(a, b, surface.width + 12, surface.terrainColor, 0.015);
-    addMeshSegment(a, b, surface.width, surface.color, 0.055);
 
     if ((a.surfaceKey === 'ASPHALT' || a.surfaceKey === 'MOUNTAIN') && i % 2 === 0) {
-      const positions = [
-        localToCartesian(a.x, a.y, course.heightAt(a.x, a.y) + 0.105),
-        localToCartesian(b.x, b.y, course.heightAt(b.x, b.y) + 0.105)
-      ];
-
       viewer.entities.add({
         polyline: {
-          positions,
+          positions: [
+            localToCartesian(a.x, a.y, course.heightAt(a.x, a.y) + 0.13),
+            localToCartesian(b.x, b.y, course.heightAt(b.x, b.y) + 0.13)
+          ],
           width: 1.5,
           material: color('#e8e2be', 0.82)
         }
@@ -380,19 +414,7 @@ function initializeWorld() {
   vehicle = createVehicleState();
   buildCourseVisuals();
 
-  const position = vehiclePosition();
-  carEntity = viewer.entities.add({
-    name: GravelRushVehicleConfig.name,
-    position,
-    orientation: vehicleOrientation(position),
-    box: {
-      dimensions: new Cesium.Cartesian3(1.88, 4.45, 1.38),
-      material: color('#f2b84b'),
-      outline: true,
-      outlineColor: color('#191b1f')
-    }
-  });
-
+  buildCarModel();
   buildCockpit();
   updateWheelGround();
   updateCarEntity();
@@ -406,7 +428,7 @@ function resetCar() {
   spawn.heading = start.heading;
   vehicle = createVehicleState();
 
-  if (carEntity) updateCarEntity();
+  updateCarEntity();
   updateWheelGround();
   setCamera();
   setWorldStatus('RESET TO START', 1.0);
@@ -513,9 +535,93 @@ function vehicleOrientation(position) {
   );
 }
 
-function cockpitPartPosition(forward, right, heightAboveGround) {
+function vehiclePartPosition(forward, right, heightAboveGround) {
   const p = offsetFromVehicle(forward, right);
   return localToCartesian(p.x, p.y, vehicle.groundHeight + heightAboveGround);
+}
+
+function addCarBox(name, forward, right, height, dimensions, material) {
+  const position = vehiclePartPosition(forward, right, height);
+  const entity = viewer.entities.add({
+    name,
+    position,
+    orientation: vehicleOrientation(position),
+    box: {
+      dimensions: new Cesium.Cartesian3(...dimensions),
+      material: color(material),
+      outline: false
+    }
+  });
+  carEntities.push({ entity, kind: 'box', forward, right, height });
+}
+
+function addCarWheel(name, forward, right) {
+  const position = vehiclePartPosition(forward, right, 0.38);
+  const tire = viewer.entities.add({
+    name,
+    position,
+    orientation: vehicleOrientation(position),
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(0.20, 0.37, 0.37),
+      material: color('#111214')
+    }
+  });
+  carEntities.push({ entity: tire, kind: 'wheel', forward, right, height: 0.38 });
+
+  const rimPosition = vehiclePartPosition(forward, right, 0.38);
+  const rim = viewer.entities.add({
+    name: name + ' rim',
+    position: rimPosition,
+    orientation: vehicleOrientation(rimPosition),
+    ellipsoid: {
+      radii: new Cesium.Cartesian3(0.205, 0.19, 0.19),
+      material: color('#c7ccd1')
+    }
+  });
+  carEntities.push({ entity: rim, kind: 'wheel', forward, right, height: 0.38 });
+}
+
+function buildCarModel() {
+  carEntities = [];
+
+  const body = '#e39b28';
+  const bodyDark = '#c57816';
+  const glass = '#25323a';
+  const trim = '#17191c';
+
+  addCarBox('GRX chassis', 0.00, 0.00, 0.50, [1.88, 4.18, 0.44], body);
+  addCarBox('GRX lower aero', 0.00, 0.00, 0.28, [1.76, 3.86, 0.18], trim);
+  addCarBox('GRX hood', 1.23, 0.00, 0.78, [1.74, 1.38, 0.24], bodyDark);
+  addCarBox('GRX cabin glass', -0.22, 0.00, 1.06, [1.56, 1.72, 0.50], glass);
+  addCarBox('GRX roof', -0.26, 0.00, 1.39, [1.48, 1.34, 0.14], body);
+  addCarBox('GRX front bumper', 2.08, 0.00, 0.43, [1.92, 0.26, 0.24], trim);
+  addCarBox('GRX rear bumper', -2.08, 0.00, 0.44, [1.92, 0.28, 0.25], trim);
+  addCarBox('GRX left skirt', 0.00, -0.92, 0.34, [0.11, 3.55, 0.18], trim);
+  addCarBox('GRX right skirt', 0.00, 0.92, 0.34, [0.11, 3.55, 0.18], trim);
+  addCarBox('GRX spoiler blade', -1.82, 0.00, 1.36, [1.70, 0.18, 0.12], trim);
+  addCarBox('GRX spoiler left', -1.69, -0.60, 1.18, [0.10, 0.12, 0.38], trim);
+  addCarBox('GRX spoiler right', -1.69, 0.60, 1.18, [0.10, 0.12, 0.38], trim);
+  addCarBox('GRX left headlight', 2.12, -0.53, 0.66, [0.46, 0.08, 0.13], '#f4f1d4');
+  addCarBox('GRX right headlight', 2.12, 0.53, 0.66, [0.46, 0.08, 0.13], '#f4f1d4');
+  addCarBox('GRX left taillight', -2.13, -0.55, 0.66, [0.43, 0.08, 0.13], '#b52c26');
+  addCarBox('GRX right taillight', -2.13, 0.55, 0.66, [0.43, 0.08, 0.13], '#b52c26');
+
+  for (const forward of [-1.32, 1.32]) {
+    addCarWheel('GRX wheel', forward, -0.96);
+    addCarWheel('GRX wheel', forward, 0.96);
+  }
+}
+
+function updateCarModel() {
+  for (const part of carEntities) {
+    const position = vehiclePartPosition(part.forward, part.right, part.height);
+    part.entity.position = position;
+    part.entity.orientation = vehicleOrientation(position);
+  }
+}
+
+function cockpitPartPosition(forward, right, heightAboveGround) {
+  return vehiclePartPosition(forward, right, heightAboveGround);
 }
 
 function buildCockpit() {
@@ -617,10 +723,8 @@ function updateCockpitEntities() {
 }
 
 function updateCarEntity() {
-  if (!carEntity || !vehicle) return;
-  const position = vehiclePosition();
-  carEntity.position = position;
-  carEntity.orientation = vehicleOrientation(position);
+  if (!vehicle) return;
+  updateCarModel();
   updateCockpitEntities();
 }
 
@@ -686,8 +790,8 @@ function setCamera() {
 
   const firstPerson = mode === 'FIRST PERSON';
 
-  if (carEntity) {
-    carEntity.show = !firstPerson;
+  for (const part of carEntities) {
+    part.entity.show = !firstPerson;
   }
 
   for (const part of cockpitEntities) {
@@ -723,25 +827,24 @@ function setCamera() {
     return;
   }
 
-  // Low third-person chase camera. The camera stays only a few meters above
-  // the road and sits directly behind the vehicle instead of looking down from above.
-  const orbitHeading = vehicle.heading + cameraLookX * Cesium.Math.toRadians(68);
-  const chaseDistance = 6.8 + Math.min(vehicle.speed * 0.055, 2.7);
+  // Third person now targets the vehicle itself so the car stays visible,
+  // rather than aiming several meters ahead and pushing it below the viewport.
+  const orbitHeading = vehicle.heading + cameraLookX * Cesium.Math.toRadians(64);
+  const chaseDistance = 5.6 + Math.min(vehicle.speed * 0.045, 2.2);
   const chaseX = worldPosition.x - Math.sin(orbitHeading) * chaseDistance;
   const chaseY = worldPosition.y - Math.cos(orbitHeading) * chaseDistance;
-
-  const targetForward = offsetFromVehicle(6.5, 0);
+  const chaseGround = course.heightAt(chaseX, chaseY);
 
   aimCamera(
     {
       x: chaseX,
       y: chaseY,
-      z: carCenter + 2.0 + Math.min(vehicle.speed * 0.018, 0.8)
+      z: Math.max(chaseGround + 1.85, carCenter + 1.35)
     },
     {
-      x: targetForward.x,
-      y: targetForward.y,
-      z: carCenter + 0.20 - cameraLookY * 4.5
+      x: worldPosition.x,
+      y: worldPosition.y,
+      z: carCenter + 0.12 - cameraLookY * 3.2
     }
   );
 }
