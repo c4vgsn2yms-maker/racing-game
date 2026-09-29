@@ -36,6 +36,7 @@ const touch = new Set();
 
 let viewer = null;
 let carEntity = null;
+let cockpitEntities = [];
 let running = false;
 let cameraModeIndex = 0;
 let cameraLookX = 0;
@@ -310,6 +311,7 @@ function initializeWorld() {
     }
   });
 
+  buildCockpit();
   updateWheelGround();
   updateCarEntity();
   setCamera();
@@ -429,11 +431,115 @@ function vehicleOrientation(position) {
   );
 }
 
+function cockpitPartPosition(forward, right, heightAboveGround) {
+  const p = offsetFromVehicle(forward, right);
+  return localToCartesian(p.x, p.y, vehicle.groundHeight + heightAboveGround);
+}
+
+function buildCockpit() {
+  cockpitEntities = [];
+
+  const parts = [
+    {
+      name: 'Dashboard',
+      forward: 0.88,
+      right: 0,
+      height: 0.84,
+      dimensions: [1.72, 0.34, 0.24],
+      material: '#17191c'
+    },
+    {
+      name: 'Instrument hood',
+      forward: 0.63,
+      right: -0.36,
+      height: 1.02,
+      dimensions: [0.58, 0.22, 0.18],
+      material: '#0e1012'
+    },
+    {
+      name: 'Steering wheel',
+      forward: 0.48,
+      right: -0.38,
+      height: 1.04,
+      dimensions: [0.42, 0.08, 0.42],
+      material: '#090a0b'
+    },
+    {
+      name: 'Left windshield pillar',
+      forward: 1.00,
+      right: -0.82,
+      height: 1.27,
+      dimensions: [0.10, 0.12, 0.64],
+      material: '#191b1e'
+    },
+    {
+      name: 'Right windshield pillar',
+      forward: 1.00,
+      right: 0.82,
+      height: 1.27,
+      dimensions: [0.10, 0.12, 0.64],
+      material: '#191b1e'
+    },
+    {
+      name: 'Windshield header',
+      forward: 0.98,
+      right: 0,
+      height: 1.56,
+      dimensions: [1.72, 0.13, 0.12],
+      material: '#191b1e'
+    },
+    {
+      name: 'Left door top',
+      forward: 0.05,
+      right: -0.88,
+      height: 1.03,
+      dimensions: [0.10, 1.40, 0.16],
+      material: '#202328'
+    },
+    {
+      name: 'Right door top',
+      forward: 0.05,
+      right: 0.88,
+      height: 1.03,
+      dimensions: [0.10, 1.40, 0.16],
+      material: '#202328'
+    }
+  ];
+
+  for (const part of parts) {
+    const position = cockpitPartPosition(part.forward, part.right, part.height);
+    const entity = viewer.entities.add({
+      name: part.name,
+      position,
+      orientation: vehicleOrientation(position),
+      show: false,
+      box: {
+        dimensions: new Cesium.Cartesian3(...part.dimensions),
+        material: color(part.material),
+        outline: false
+      }
+    });
+
+    cockpitEntities.push({ ...part, entity });
+  }
+}
+
+function updateCockpitEntities() {
+  if (!vehicle) return;
+
+  for (const part of cockpitEntities) {
+    const position = cockpitPartPosition(part.forward, part.right, part.height);
+    part.entity.position = position;
+    part.entity.orientation = vehicleOrientation(position);
+  }
+}
+
 function updateCarEntity() {
   if (!carEntity || !vehicle) return;
   const position = vehiclePosition();
   carEntity.position = position;
   carEntity.orientation = vehicleOrientation(position);
+  updateCockpitEntities();
 }
 
 function offsetFromVehicle(forward, right) {
@@ -487,17 +593,25 @@ function setCamera() {
   const mode = CAMERA_MODES[cameraModeIndex];
   ui.camera.textContent = mode;
 
+  const firstPerson = mode === 'FIRST PERSON';
+
   if (carEntity) {
-    carEntity.show = mode !== 'FIRST PERSON';
+    carEntity.show = !firstPerson;
+  }
+
+  for (const part of cockpitEntities) {
+    part.entity.show = firstPerson;
   }
 
   const carGround = vehicle.groundHeight;
   const carCenter = vehicleAltitude();
 
-  if (mode === 'FIRST PERSON') {
+  if (firstPerson) {
+    // Left-hand-drive cockpit viewpoint: eye position is inside the cabin,
+    // behind the dashboard and slightly left of vehicle centerline.
     const viewHeading = vehicle.heading + cameraLookX * Cesium.Math.toRadians(78);
-    const cameraOffset = offsetFromVehicle(0.70, 0);
-    const lookDistance = 34;
+    const cameraOffset = offsetFromVehicle(0.10, -0.38);
+    const lookDistance = 36;
     const targetX = cameraOffset.x + Math.sin(viewHeading) * lookDistance;
     const targetY = cameraOffset.y + Math.cos(viewHeading) * lookDistance;
 
@@ -505,12 +619,12 @@ function setCamera() {
       {
         x: cameraOffset.x,
         y: cameraOffset.y,
-        z: carGround + 1.24
+        z: carGround + 1.20
       },
       {
         x: targetX,
         y: targetY,
-        z: carGround + 1.24 - cameraLookY * 9
+        z: carGround + 1.20 - cameraLookY * 8.0
       }
     );
     return;
