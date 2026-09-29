@@ -1,125 +1,132 @@
-# Racing Game Roadmap
+# Gravel Rush Roadmap
 
-## Current milestone — Phoenix 3D open world
+## Current milestone — Multi-Terrain Endurance
+
+The default browser build now uses a purpose-built generated driving world instead of Google Maps.
 
 Implemented:
 
-- CesiumJS 3D world renderer
-- Google Maps Platform Photorealistic 3D Tiles integration
-- Phoenix downtown world origin/spawn
-- Geodetic vehicle movement
-- Chase, hood and orbit cameras
-- Touch, keyboard and gamepad driving
-- Height sampling against rendered 3D geometry
-- Streaming world architecture
-- Preserved legacy 2D handling build
+- ~38.3 km continuous loop
+- 250 spline samples
+- asphalt
+- gravel
+- loose dirt
+- mud
+- deep sand
+- rocky trail
+- packed snow
+- ice
+- mountain tarmac
+- rough rally terrain
+- large elevation changes
+- banked corners
+- rough/ramp-shaped sections
+- off-track terrain
+- surface-dependent grip
+- surface-dependent rolling resistance
+- track progress and section HUD
+- keyboard, touch and first-class controller support
+- controller vibration hooks
+- regression tests for physics, controller input and course generation
+
+The previous Phoenix/Google 3D Tiles experiment remains in the repository as reference code but is not loaded by the default page.
 
 ## Vehicle physics — implemented baseline
 
-The browser build now includes:
-
 - 3-DOF rigid-body longitudinal/lateral/yaw dynamics
-- four independently loaded tire contact patches
+- four tire contact patches
 - slip angle and estimated longitudinal slip
 - combined tire-force friction limit
 - tire load sensitivity
-- longitudinal and lateral load transfer
-- per-corner spring/damper suspension
-- suspension travel and bump stops
+- longitudinal/lateral load transfer
+- spring/damper suspension
+- travel and bump stops
 - anti-roll stiffness distribution
-- four-wheel 3D ground-height sampling
-- road grade and bank
+- road grade and banking
 - engine RPM/torque curve
 - clutch coupling approximation
 - six forward gears + reverse
-- final drive and driveline efficiency
-- AWD center and axle limited-slip behavior
+- final drive
+- driveline efficiency
+- AWD torque distribution
 - configurable FWD/RWD/AWD architecture
 - service brake bias
 - handbrake
 - ABS
 - traction control
-- aerodynamic drag, side drag and downforce
+- aerodynamic drag/downforce
 - rolling resistance
-- fixed physics substeps around 120 Hz
-- physics regression smoke tests
+- fixed-step substepping near 120 Hz
 
-## Next — higher-fidelity vehicle physics
+## Next — Terrain and chassis fidelity
+
+- true 6-DOF chassis motion
+- vertical velocity and airborne physics
+- real jumps instead of ground-following ramp profiles
+- landing forces and suspension bottoming
+- explicit unsprung mass and tire vertical compliance
+- higher-detail terrain mesh around the driving line
+- rutting and deformable loose surfaces
+- puddles and water depth
+- mud depth
+- sand sink resistance
+- snow depth
+- ice patches and transitions
+- surface-specific dust, gravel, mud, snow and spray particles
+- tire tracks and skid marks
+
+## Next — Tire and suspension fidelity
 
 - measured Pacejka / MF-Tyre parameter sets
-- tire temperature, pressure, wear and wet-grip state
-- explicit unsprung mass and tire vertical compliance per corner
-- suspension geometry: camber, caster, toe, roll centers and bump steer
-- true 6-DOF sprung-body pitch/roll/heave inertia
-- driveline shaft compliance, clutch dynamics and backlash
-- turbo/manifold dynamics for turbocharged vehicles
-- selectable open/LSD/locking differential types
-- controller vibration / force feedback where supported
-- proper collision shapes and rigid-body impacts
+- tire temperature
+- tire pressure
+- tire wear
+- wet grip and hydroplaning
+- camber
+- caster
+- toe
+- roll centers
+- bump steer
+- spring preload
+- adjustable dampers
+- ride-height tuning
+- anti-roll bar tuning
 
-Vehicle data should include mass, wheelbase, track width, suspension travel, center of mass, engine curve, gear ratios, final drive, steering lock, aero drag, tire parameters and surface grip.
+## Vehicles
 
-Initial fictional archetypes:
+Add a garage using the same physics architecture:
 
-1. Compact AWD rally sedan
-2. Lightweight AWD performance sedan
-3. Short-wheelbase 4x4 truck
-4. Short-wheelbase RWD pickup
-5. Lightweight RWD coupe
+1. compact AWD rally sedan
+2. lightweight AWD performance sedan
+3. short-wheelbase 4x4 truck
+4. short-wheelbase RWD pickup
+5. lightweight RWD coupe
 
-## Phoenix gameplay layer
+Each vehicle should define mass, wheelbase, tracks, CG, suspension, engine curve, gear ratios, final drive, aero and tire parameters.
 
-Google Photorealistic 3D Tiles stay as the streamed visual environment.
+## Gameplay
 
-Do **not** scrape, trace or convert Google map content into a permanent gameplay dataset.
-
-Add independently licensed/open or authored gameplay layers for:
-
-- road centerlines and road classes
-- drivable-surface classification
-- traffic lanes
-- intersections and signals
-- speed zones
-- spawn points
-- route planning
-- race routes
-- garages
-- dealerships
-- fuel/charging locations
-- police and traffic AI routing
-- collision proxies where needed
-
-This lets the game retain real Phoenix geography without treating streamed Google content as owned game assets.
-
-## World systems
-
-- seamless city streaming
-- traffic
-- pedestrians where appropriate
+- lap timing
+- checkpoints
+- sector timing
+- rally stage timing
+- ghost runs
+- AI opponents
+- endurance events
+- rally events
+- off-road events
+- time trials
+- hill climbs
+- vehicle recovery
+- garages and tuning
+- damage
+- repair
+- fuel as an optional simulation setting
 - day/night cycle
-- Arizona weather
-- dust
-- rain and wet-road grip
-- destructible lightweight props
-- vehicle damage
-- towing/recovery
-- garages and vehicle storage
-- fuel/energy system as an optional realism setting
+- weather
 
-## Events
+## Browser vs native engine
 
-- street circuits
-- point-to-point city races
-- highway runs
-- mountain-road time trials
-- dirt/desert rally stages
-- off-road trails
-- drag racing
-- delivery/driving jobs
-- free-roam challenges
+The browser build remains useful for rapid physics and gameplay iteration.
 
-## Engine direction
-
-The browser/Cesium build is useful for validating the real-world map streaming and game design.
-
-For the full physics-heavy version, Unreal Engine + Cesium for Unreal is the preferred production path because it can combine the same Google Photorealistic 3D Tiles stream with Unreal's vehicle physics, collision systems, AI, world gameplay and rendering.
+For the eventual highest-fidelity version, Unreal Engine remains a strong migration target once the browser systems and vehicle-data format are mature enough to justify native 3D collision, skeletal vehicles, advanced effects and larger worlds.
